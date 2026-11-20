@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import androidx.core.content.ContextCompat
 import app.aura.ring.AppState
 import app.aura.ring.NotifStore
@@ -26,6 +27,11 @@ class AuraNotificationListener : NotificationListenerService() {
 
         val config = AppState.config.value
         if (!config.notifications || !AppState.running.value) return
+
+        Log.d(
+            "AuraRing",
+            "post $pkg flags=${notification.flags} running=${AppState.running.value}",
+        )
 
         if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return
         if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return

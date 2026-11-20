@@ -169,7 +169,11 @@ fun HomeScreen(
                             when (backend) {
                                 "Root" -> "Root · full 8-pixel control"
                                 "Shizuku" -> "Shizuku · whole-ring colour"
-                                else -> "Start to connect to the ring"
+                                else -> if (running) {
+                                    "No backend — grant root or Shizuku"
+                                } else {
+                                    "Start to connect to the ring"
+                                }
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
@@ -375,8 +379,7 @@ private fun BackendPill(backend: String, running: Boolean) {
         backend == "Root" -> "Root" to scheme.primary
         backend == "Shizuku" -> "Shizuku" to scheme.tertiary
         else -> "Starting" to scheme.onSurfaceVariant
-    }
-    Surface(
+    }    Surface(
         shape = RoundedCornerShape(50),
         color = color.copy(alpha = 0.14f),
         border = BorderStroke(1.dp, color.copy(alpha = 0.4f)),
