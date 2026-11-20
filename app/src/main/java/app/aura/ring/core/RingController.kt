@@ -185,6 +185,14 @@ class RingController(context: Context) {
         return result.code == 0
     }
 
+    /** Forget cached frame state so the next show() writes everything again. */
+    fun invalidate() {
+        lastColors = null
+        lastBrightness = -1
+        lastBinderColor = Int.MIN_VALUE
+        lastBinderBrightness = -1
+    }
+
     suspend fun registerDump(): String {
         val shell = root ?: return "Root is not available"
         return shell.exec("cat $SYS/reg 2>&1").output

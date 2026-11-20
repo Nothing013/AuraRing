@@ -36,6 +36,7 @@ data class RingConfig(
     val chargingArc: Boolean = true,
     val screenOffDim: Boolean = true,
     val autoStart: Boolean = true,
+    val yieldToCamera: Boolean = true,
 )
 
 data class BatteryInfo(
@@ -70,6 +71,7 @@ object AppState {
     val backend = MutableStateFlow("Starting")
     val battery = MutableStateFlow(BatteryInfo())
     val screenOn = MutableStateFlow(true)
+    val cameraInUse = MutableStateFlow(false)
     val bands = MutableStateFlow(FloatArray(8))
     val preview = MutableStateFlow(IntArray(8) { 0xFF000000.toInt() })
     val overlay = MutableStateFlow<Overlay?>(null)
@@ -90,6 +92,7 @@ object AppState {
             chargingArc = p.getBoolean("charging_arc", true),
             screenOffDim = p.getBoolean("screen_off_dim", true),
             autoStart = p.getBoolean("auto_start", true),
+            yieldToCamera = p.getBoolean("yield_camera", true),
         )
         running.value = p.getBoolean("running", false)
     }
@@ -114,6 +117,7 @@ object AppState {
             .putBoolean("charging_arc", c.chargingArc)
             .putBoolean("screen_off_dim", c.screenOffDim)
             .putBoolean("auto_start", c.autoStart)
+            .putBoolean("yield_camera", c.yieldToCamera)
             .apply()
     }
 

@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 class RingEngine(private val controller: RingController) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
+    private var yielded = false
 
     fun start() {
         if (job?.isActive == true) return
@@ -24,6 +25,20 @@ class RingEngine(private val controller: RingController) {
             while (isActive) {
                 val config = AppState.config.value
                 val now = SystemClock.elapsedRealtime()
+
+                if (config.yieldToCamera && AppState.cameraInUse.value) {
+                    if (!yielded) {
+                        yielded = true
+                        controller.off()
+                        AppState.preview.value = IntArray(8)
+                    }
+                    delay(120)
+                    continue
+                }
+                if (yielded) {
+                    yielded = false
+                    controller.invalidate()
+                }
 
                 val overlay = AppState.overlay.value
                 if (overlay != null && now - overlay.startedAt > overlay.durationMs) {

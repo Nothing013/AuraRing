@@ -37,6 +37,7 @@ Shizuku mode uses `miui.lights.ILightsManager` transaction 2
 - Per-app notification rhythms: colour + pulse / sweep / blink / breathe,
   rate-limited to one flash per app every 1.8 s
 - Screen-off dimming, start on boot
+- Yields the ring while any app holds the camera (CameraManager availability)
 - Quick Settings tile
 - Automation API (Tasker, MacroDroid, adb)
 
@@ -62,7 +63,8 @@ adb shell am broadcast -a app.aura.ring.BRIGHTNESS \
 
 `mode` accepts `OFF`, `SOLID`, `RAINBOW`, `BREATHE`, `COMET`, `SPECTRUM`,
 `BATTERY`. `pattern` accepts `PULSE`, `SWEEP`, `BLINK`, `BREATHE`. Colour can
-also be passed as a signed int in `--ei color`.
+also be passed as a signed int in `--ei color`. Boolean extras `music` and
+`notifications` accept `--ez music true`.
 
 ## Permissions
 

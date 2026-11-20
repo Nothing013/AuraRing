@@ -38,6 +38,10 @@ class AuraCommandReceiver : BroadcastReceiver() {
                 val speed = intent.takeIf { it.hasExtra("speed") }
                     ?.getFloatExtra("speed", -1f)
                     ?.takeIf { it > 0f }
+                val music = intent.takeIf { it.hasExtra("music") }
+                    ?.getBooleanExtra("music", false)
+                val notifications = intent.takeIf { it.hasExtra("notifications") }
+                    ?.getBooleanExtra("notifications", false)
 
                 AppState.update { config ->
                     config.copy(
@@ -45,6 +49,8 @@ class AuraCommandReceiver : BroadcastReceiver() {
                         color = color ?: config.color,
                         brightness = brightness ?: config.brightness,
                         speed = speed ?: config.speed,
+                        music = music ?: config.music,
+                        notifications = notifications ?: config.notifications,
                     )
                 }
                 ensureRunning(ctx)
