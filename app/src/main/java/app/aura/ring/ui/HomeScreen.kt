@@ -215,17 +215,30 @@ fun HomeScreen(
         }
 
         item {
-            SectionCard(title = "Colour", icon = Icons.Rounded.Palette) {
+            val needsSecondColor = config.mode == RingMode.SPECTRUM ||
+                    config.mode == RingMode.SPLIT ||
+                    config.mode == RingMode.SPIN
+            SectionCard(title = "Colour & Palette", icon = Icons.Rounded.Palette) {
                 ColorPicker(
-                    label = if (config.mode == RingMode.SPECTRUM) "Low band" else "Primary",
+                    label = when (config.mode) {
+                        RingMode.SPECTRUM -> "Low band (bass)"
+                        RingMode.SPLIT -> "Half A"
+                        RingMode.SPIN -> "Orbiting Spot A"
+                        else -> "Primary Colour"
+                    },
                     color = config.color,
                     onColor = { c -> onConfig { it.copy(color = c) } },
                 )
-                AnimatedVisibility(config.mode == RingMode.SPECTRUM) {
+                AnimatedVisibility(needsSecondColor) {
                     Column {
                         Spacer(Modifier.height(18.dp))
                         ColorPicker(
-                            label = "High band",
+                            label = when (config.mode) {
+                                RingMode.SPECTRUM -> "High band (treble)"
+                                RingMode.SPLIT -> "Half B"
+                                RingMode.SPIN -> "Orbiting Spot B"
+                                else -> "Secondary Colour"
+                            },
                             color = config.color2,
                             onColor = { c -> onConfig { it.copy(color2 = c) } },
                         )
@@ -395,7 +408,8 @@ private fun BackendPill(backend: String, running: Boolean) {
         backend == "Root" -> "Root" to scheme.primary
         backend == "Shizuku" -> "Shizuku" to scheme.tertiary
         else -> "Starting" to scheme.onSurfaceVariant
-    }    Surface(
+    }
+    Surface(
         shape = RoundedCornerShape(50),
         color = color.copy(alpha = 0.14f),
         border = BorderStroke(1.dp, color.copy(alpha = 0.4f)),

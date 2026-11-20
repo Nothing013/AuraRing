@@ -14,6 +14,11 @@ enum class RingMode(val label: String, val blurb: String) {
     BREATHE("Breathe", "Slow pulse in and out"),
     COMET("Comet", "A bright head with a fading tail"),
     SPECTRUM("Spectrum", "Eight audio bands, eight pixels"),
+    SPLIT("Split", "Two complementary colours on opposite halves"),
+    SPIN("Spin", "Dual orbiting spots around the ring"),
+    POLICE("Police", "Red and blue alternating emergency strobe"),
+    FIRE("Fire", "Warm organic flickering embers"),
+    AURORA("Aurora", "Flowing nordic color wave"),
     BATTERY("Battery", "Battery level as a ring arc"),
 }
 

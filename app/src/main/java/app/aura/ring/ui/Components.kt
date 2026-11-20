@@ -222,6 +222,10 @@ private val presets = intArrayOf(
     0xFFFFD166.toInt(),
     0xFFFF8A5B.toInt(),
     0xFFFF2D95.toInt(),
+    0xFF7928CA.toInt(),
+    0xFFFF007F.toInt(),
+    0xFFFF1744.toInt(),
+    0xFF00E5FF.toInt(),
     0xFFB388FF.toInt(),
     0xFFFFFFFF.toInt(),
 )

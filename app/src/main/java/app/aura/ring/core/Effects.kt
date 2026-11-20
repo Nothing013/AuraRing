@@ -42,7 +42,96 @@ object Effects {
             RingMode.BREATHE -> breathe(config, nowMs)
             RingMode.COMET -> comet(config, nowMs, perPixel)
             RingMode.SPECTRUM -> spectrum(config, bands, perPixel)
+            RingMode.SPLIT -> split(config, perPixel)
+            RingMode.SPIN -> spin(config, nowMs, perPixel)
+            RingMode.POLICE -> police(config, nowMs, perPixel)
+            RingMode.FIRE -> fire(config, nowMs, perPixel)
+            RingMode.AURORA -> aurora(config, nowMs, perPixel)
             RingMode.BATTERY -> batteryFrame(battery, nowMs, perPixel)
+        }
+    }
+
+    private fun split(config: RingConfig, perPixel: Boolean): IntArray {
+        if (!perPixel) return solid(lerpColor(config.color, config.color2, 0.5f))
+        return IntArray(8) { i ->
+            if (i < 4) config.color else config.color2
+        }
+    }
+
+    private fun spin(config: RingConfig, now: Long, perPixel: Boolean): IntArray {
+        val speed = config.speed.coerceIn(0.15f, 4f)
+        val step = ((now * speed / 110f).toInt()) % 8
+        if (!perPixel) {
+            val isA = (step % 2 == 0)
+            return solid(if (isA) config.color else config.color2)
+        }
+        val spotA = step
+        val spotB = (step + 4) % 8
+        return IntArray(8) { i ->
+            when (i) {
+                spotA -> config.color
+                spotB -> config.color2
+                (spotA - 1 + 8) % 8 -> scale(config.color, 0.35f)
+                (spotB - 1 + 8) % 8 -> scale(config.color2, 0.35f)
+                else -> 0
+            }
+        }
+    }
+
+    private fun police(config: RingConfig, now: Long, perPixel: Boolean): IntArray {
+        val speed = config.speed.coerceIn(0.2f, 3f)
+        val phase = ((now * speed / 80L) % 12L).toInt()
+        val red = 0xFFFF1818.toInt()
+        val blue = 0xFF1855FF.toInt()
+        val colorA = when (phase) {
+            0, 2 -> red
+            else -> 0
+        }
+        val colorB = when (phase) {
+            6, 8 -> blue
+            else -> 0
+        }
+        if (!perPixel) {
+            val c = if (phase < 6) colorA else colorB
+            return solid(c)
+        }
+        return IntArray(8) { i ->
+            if (i < 4) colorA else colorB
+        }
+    }
+
+    private fun fire(config: RingConfig, now: Long, perPixel: Boolean): IntArray {
+        val firePalette = intArrayOf(
+            0xFFFF1100.toInt(),
+            0xFFFF4400.toInt(),
+            0xFFFF8800.toInt(),
+            0xFFFFCC00.toInt()
+        )
+        val speed = config.speed.coerceIn(0.2f, 3f)
+        if (!perPixel) {
+            val flame = (0.7f + 0.3f * sin(now * speed * 0.008).toFloat()).coerceIn(0f, 1f)
+            return solid(scale(firePalette[1], flame))
+        }
+        return IntArray(8) { i ->
+            val phase = (now * speed * 0.006f + i * 1.3f)
+            val flick = (0.6f + 0.4f * sin(phase.toDouble()) * cos((phase * 1.7f).toDouble())).toFloat().coerceIn(0.2f, 1f)
+            val colorIdx = ((sin(phase.toDouble() * 0.7) * 0.5 + 0.5) * (firePalette.size - 1)).toInt().coerceIn(0, firePalette.size - 1)
+            scale(firePalette[colorIdx], flick)
+        }
+    }
+
+    private fun aurora(config: RingConfig, now: Long, perPixel: Boolean): IntArray {
+        val speed = config.speed.coerceIn(0.1f, 4f)
+        val baseHue = 130f
+        if (!perPixel) {
+            val h = (baseHue + sin(now * speed * 0.001) * 45f).toFloat()
+            return solid(hsv(h, 0.95f, 1f))
+        }
+        return IntArray(8) { i ->
+            val wave = sin((now * speed * 0.0018) + (i * PI * 2.0 / 8.0)).toFloat()
+            val h = (baseHue + wave * 55f + 360f) % 360f
+            val bright = (0.5 + 0.5 * cos((now * speed * 0.0015 + i).toDouble())).toFloat()
+            hsv(h, 0.92f, 0.35f + 0.65f * bright)
         }
     }
 
