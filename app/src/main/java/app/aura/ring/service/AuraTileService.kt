@@ -18,6 +18,7 @@ class AuraTileService : TileService() {
         super.onClick()
         AppState.init(this)
         if (AppState.running.value) {
+            AppState.running.value = false
             stopRing()
         } else {
             startRing()

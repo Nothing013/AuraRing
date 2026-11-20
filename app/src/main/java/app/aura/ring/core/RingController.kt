@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 class RingController(context: Context) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val prefs = appContext.getSharedPreferences("aura", Context.MODE_PRIVATE)
 
     private var root: RootShell? = null
     private var rootReady = false
@@ -41,9 +42,16 @@ class RingController(context: Context) {
         }
 
     suspend fun init(): String {
-        originalStrip = Settings.Global.getInt(
+        val currentStrip = Settings.Global.getInt(
             appContext.contentResolver, "settings_strip_light_enable", 2
         )
+        // If a previous run crashed while owning the chip, the live value is 0.
+        // Recover the user's real value from the last non-zero reading.
+        val storedStrip = prefs.getInt("original_strip", -1)
+        originalStrip = if (currentStrip == 0 && storedStrip >= 0) storedStrip else currentStrip
+        if (currentStrip != 0) {
+            prefs.edit().putInt("original_strip", currentStrip).apply()
+        }
         originalLamp = Settings.Global.getInt(
             appContext.contentResolver, "lamp_effect_brightness", 175
         )

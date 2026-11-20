@@ -206,9 +206,11 @@ fun Chip(
     ) {
         Text(
             label,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
             style = MaterialTheme.typography.labelLarge,
             color = if (selected) accent else scheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

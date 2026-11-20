@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -399,24 +401,21 @@ private fun BackendPill(backend: String, running: Boolean) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ModeGrid(selected: RingMode, onSelect: (RingMode) -> Unit) {
     val modes = RingMode.entries.filter { it != RingMode.OFF } + RingMode.OFF
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        modes.chunked(4).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { mode ->
-                    Chip(
-                        label = mode.label,
-                        selected = mode == selected,
-                        onClick = { onSelect(mode) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                repeat(4 - row.size) {
-                    Spacer(Modifier.weight(1f))
-                }
-            }
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        modes.forEach { mode ->
+            Chip(
+                label = mode.label,
+                selected = mode == selected,
+                onClick = { onSelect(mode) },
+            )
         }
     }
 }

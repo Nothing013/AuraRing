@@ -13,6 +13,7 @@ import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -51,6 +52,7 @@ class RingService : Service() {
         controller = RingController(this)
         engine = RingEngine(controller)
         audio = AudioEngine(this)
+        AppState.screenOn.value = getSystemService(PowerManager::class.java).isInteractive
         registerReceivers()
 
         scope.launch {
