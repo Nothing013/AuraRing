@@ -79,7 +79,14 @@ fun HomeScreen(
     val micLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) onConfig { it.copy(music = true) }
+        if (granted) {
+            onConfig {
+                it.copy(
+                    music = true,
+                    mode = if (it.mode == RingMode.SOLID) RingMode.SPECTRUM else it.mode,
+                )
+            }
+        }
     }
 
     LazyColumn(
@@ -281,7 +288,16 @@ fun HomeScreen(
                             ) {
                                 micLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             } else {
-                                onConfig { it.copy(music = v) }
+                                onConfig {
+                                    it.copy(
+                                        music = v,
+                                        mode = if (v && it.mode == RingMode.SOLID) {
+                                            RingMode.SPECTRUM
+                                        } else {
+                                            it.mode
+                                        },
+                                    )
+                                }
                             }
                         },
                     )
