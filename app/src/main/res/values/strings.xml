@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aura Ring</string>
+    <string name="tile_label">Aura Ring</string>
+    <string name="channel_service">Ring service</string>
+    <string name="channel_service_desc">Keeps the camera ring effect running</string>
+    <string name="notification_running">Aura Ring is running</string>
+    <string name="notification_stop">Stop</string>
+</resources>
