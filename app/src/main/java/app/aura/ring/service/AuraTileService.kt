@@ -42,7 +42,7 @@ class AuraTileService : TileService() {
     }
 
     private fun updateTile() {
-        val tile: Tile? = qsTile ?: return
+        val tile: Tile = qsTile ?: return
         val running = AppState.running.value
         tile.state = if (running) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.label = "Aura Ring"

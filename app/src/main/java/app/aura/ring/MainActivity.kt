@@ -89,7 +89,7 @@ class MainActivity : ComponentActivity() {
                     Shizuku.OnRequestPermissionResultListener { _, grant ->
                         Toast.makeText(
                             context,
-                            if (grant) {
+                            if (grant == PackageManager.PERMISSION_GRANTED) {
                                 "Shizuku granted — restart the ring to use it"
                             } else {
                                 "Shizuku permission denied"

@@ -46,7 +46,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.ColorUtils
 
 @Composable
 fun SectionCard(
@@ -237,7 +236,7 @@ fun ColorPicker(
     var width by remember { mutableFloatStateOf(1f) }
     val hsv = remember(color) {
         val out = FloatArray(3)
-        ColorUtils.colorToHSV(color, out)
+        android.graphics.Color.colorToHSV(color, out)
         if (out[1] < 0.15f) out[1] = 0.9f
         out[2] = 1f
         out
