@@ -75,10 +75,17 @@ fun AppsScreen(
     var query by remember { mutableStateOf("") }
     var showSystem by remember { mutableStateOf(false) }
 
-    val listenerEnabled = remember {
-        Settings.Secure.getString(
+    val listenerEnabled by produceState(
+        initialValue = Settings.Secure.getString(
             context.contentResolver, "enabled_notification_listeners"
         )?.contains(context.packageName) == true
+    ) {
+        while (true) {
+            value = Settings.Secure.getString(
+                context.contentResolver, "enabled_notification_listeners"
+            )?.contains(context.packageName) == true
+            kotlinx.coroutines.delay(1_500)
+        }
     }
 
     val entries by produceState<List<AppEntry>>(emptyList()) {

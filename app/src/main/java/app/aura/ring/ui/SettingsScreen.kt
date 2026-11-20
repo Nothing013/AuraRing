@@ -84,6 +84,16 @@ fun SettingsScreen(
         context.contentResolver, "enabled_notification_listeners"
     )?.contains(context.packageName) == true
 
+    val batteryExempt by produceState(false) {
+        while (true) {
+            value = runCatching {
+                context.getSystemService(android.os.PowerManager::class.java)
+                    .isIgnoringBatteryOptimizations(context.packageName)
+            }.getOrDefault(false)
+            delay(2_000)
+        }
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -170,6 +180,42 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, scheme.error.copy(alpha = 0.5f)),
                 ) {
                     Text("Stop and hand back to HyperOS")
+                }
+            }
+        }
+
+        item {
+            SectionCard(title = "Automation reliability", icon = Icons.Rounded.Bolt) {
+                Text(
+                    "Android blocks apps from starting a foreground service in the " +
+                        "background. Exempting Aura from battery optimisation lets Tasker " +
+                        "and notification intents switch the ring on even when the app is " +
+                        "closed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                if (batteryExempt) {
+                    Text(
+                        "Background starts allowed",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = scheme.primary,
+                    )
+                } else {
+                    FilledTonalButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                        Uri.parse("package:${context.packageName}"),
+                                    )
+                                )
+                            }
+                        }
+                    ) {
+                        Text("Allow background starts")
+                    }
                 }
             }
         }

@@ -72,6 +72,8 @@ also be passed as a signed int in `--ei color`. Boolean extras `music` and
 - **Notification access**: per-app rhythms.
 - **Microphone**: only for the audio spectrum (Visualizer needs it).
 - **Notifications**: foreground service notice.
+- **Battery optimisation exemption** (optional): lets Tasker start the ring
+  while the app is in the background.
 
 ## Build
 
