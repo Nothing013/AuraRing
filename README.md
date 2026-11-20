@@ -37,7 +37,6 @@ Shizuku mode uses `miui.lights.ILightsManager` transaction 2
 - Per-app notification rhythms: colour + pulse / sweep / blink / breathe,
   rate-limited to one flash per app every 1.8 s
 - Screen-off dimming, start on boot
-- Yields the ring while any app holds the camera (CameraManager availability)
 - Quick Settings tile
 - Automation API (Tasker, MacroDroid, adb)
 

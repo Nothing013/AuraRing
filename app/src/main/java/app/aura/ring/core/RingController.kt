@@ -124,7 +124,8 @@ class RingController(context: Context) {
             if (c == 0) {
                 cmd.append("echo 0 > \$S/effect")
             } else {
-                cmd.append("echo '0x7a 0x00' > \$S/reg; ")
+                cmd.append("echo '0xa1 0x00' > \$S/reg; ")
+                cmd.append("echo '0xa7 0x66' > \$S/reg; ")
                 cmd.append("echo '0xa8 ${hexByte(c shr 16)}' > \$S/reg; ")
                 cmd.append("echo '0xa9 ${hexByte(c shr 8)}' > \$S/reg; ")
                 cmd.append("echo '0xaa ${hexByte(c)}' > \$S/reg; ")

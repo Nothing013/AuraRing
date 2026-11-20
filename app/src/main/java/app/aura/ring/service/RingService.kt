@@ -10,12 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
-import android.hardware.camera2.CameraManager
 import android.os.BatteryManager
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
@@ -46,24 +43,6 @@ class RingService : Service() {
     private var batteryReceiver: BroadcastReceiver? = null
     private var screenReceiver: BroadcastReceiver? = null
 
-    private var cameraManager: CameraManager? = null
-    private val unavailableCameras = mutableSetOf<String>()
-    private val cameraCallback = object : CameraManager.AvailabilityCallback() {
-        override fun onCameraAvailable(cameraId: String) {
-            synchronized(unavailableCameras) {
-                unavailableCameras.remove(cameraId)
-                AppState.cameraInUse.value = unavailableCameras.isNotEmpty()
-            }
-        }
-
-        override fun onCameraUnavailable(cameraId: String) {
-            synchronized(unavailableCameras) {
-                unavailableCameras.add(cameraId)
-                AppState.cameraInUse.value = true
-            }
-        }
-    }
-
     override fun onCreate() {
         super.onCreate()
         AppState.init(this)
@@ -75,7 +54,6 @@ class RingService : Service() {
         audio = AudioEngine(this)
         AppState.screenOn.value = getSystemService(PowerManager::class.java).isInteractive
         registerReceivers()
-        registerCameraObserver()
 
         scope.launch {
             val backend = controller.init()
@@ -122,11 +100,6 @@ class RingService : Service() {
         audio.stop()
         unregisterReceiverSafe(batteryReceiver)
         unregisterReceiverSafe(screenReceiver)
-        runCatching {
-            cameraManager?.unregisterAvailabilityCallback(cameraCallback)
-        }
-        cameraManager = null
-        AppState.cameraInUse.value = false
         AppState.setRunning(false)
         AppState.overlay.value = null
         scope.cancel()
@@ -179,18 +152,6 @@ class RingService : Service() {
     private fun unregisterReceiverSafe(receiver: BroadcastReceiver?) {
         if (receiver == null) return
         runCatching { unregisterReceiver(receiver) }
-    }
-
-    private fun registerCameraObserver() {
-        cameraManager = runCatching {
-            getSystemService(CameraManager::class.java)
-        }.getOrNull() ?: return
-        runCatching {
-            cameraManager?.registerAvailabilityCallback(
-                cameraCallback,
-                Handler(Looper.getMainLooper()),
-            )
-        }
     }
 
     private fun createChannel() {

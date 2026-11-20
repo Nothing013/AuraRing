@@ -33,7 +33,6 @@ import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Timer
@@ -302,13 +301,6 @@ fun HomeScreen(
                         icon = Icons.Rounded.LightMode,
                         checked = config.autoStart,
                         onCheckedChange = { v -> onConfig { it.copy(autoStart = v) } },
-                    )
-                    ToggleRow(
-                        title = "Yield to camera",
-                        subtitle = "Turn the ring off while any app uses the camera",
-                        icon = Icons.Rounded.PhotoCamera,
-                        checked = config.yieldToCamera,
-                        onCheckedChange = { v -> onConfig { it.copy(yieldToCamera = v) } },
                     )
                 }
             }
