@@ -65,6 +65,11 @@ adb shell am broadcast -a app.aura.ring.BRIGHTNESS \
 also be passed as a signed int in `--ei color`. Boolean extras `music` and
 `notifications` accept `--ez music true`.
 
+Android blocks foreground-service starts from the background. If Tasker should
+be able to turn the ring on while Aura is closed, use **Settings → Automation
+reliability → Allow background starts**. Otherwise the ring must already be
+running; the broadcast still updates its configuration.
+
 ## Permissions
 
 - **Root** (optional but recommended): per-pixel effects.
