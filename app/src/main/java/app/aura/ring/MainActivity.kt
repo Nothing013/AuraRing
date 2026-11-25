@@ -258,12 +258,15 @@ private fun startRing(context: Context) {
         ContextCompat.startForegroundService(
             context, Intent(context, RingService::class.java)
         )
+        AppState.setRunning(true)
     }.onFailure {
+        AppState.setRunning(false)
         Toast.makeText(context, "Cannot start service: ${it.message}", Toast.LENGTH_LONG).show()
     }
 }
 
 private fun stopRing(context: Context) {
+    AppState.setRunning(false)
     runCatching {
         context.startService(
             Intent(context, RingService::class.java).setAction(RingService.ACTION_STOP)

@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -164,6 +165,12 @@ class AudioEngine(private val context: Context) {
     fun stop() {
         wantRunning = false
         stopCapture()
+    }
+
+    /** Final teardown. The engine cannot be restarted after this. */
+    fun shutdown() {
+        stop()
+        scope.cancel()
     }
 
     private fun startCapture() {

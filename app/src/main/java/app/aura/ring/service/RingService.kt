@@ -133,7 +133,7 @@ class RingService : Service() {
 
     override fun onDestroy() {
         engine.stop()
-        audio.stop()
+        audio.shutdown()
         unregisterReceiverSafe(batteryReceiver)
         unregisterReceiverSafe(screenReceiver)
         unregisterReceiverSafe(powerReceiver)
