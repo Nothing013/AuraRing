@@ -5,6 +5,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import androidx.core.content.ContextCompat
 import app.aura.ring.AppState
+import app.aura.ring.R
 
 class AuraTileService : TileService() {
 
@@ -18,36 +19,33 @@ class AuraTileService : TileService() {
         super.onClick()
         AppState.init(this)
         if (AppState.running.value) {
-            AppState.running.value = false
-            stopRing()
+            AppState.setRunning(false)
+            runCatching {
+                startService(
+                    Intent(this, RingService::class.java).setAction(RingService.ACTION_STOP)
+                )
+            }
         } else {
-            startRing()
+            runCatching {
+                ContextCompat.startForegroundService(
+                    this, Intent(this, RingService::class.java)
+                )
+                AppState.setRunning(true)
+            }
         }
         updateTile()
-    }
-
-    private fun startRing() {
-        runCatching {
-            ContextCompat.startForegroundService(
-                this, Intent(this, RingService::class.java)
-            )
-        }
-    }
-
-    private fun stopRing() {
-        runCatching {
-            startService(
-                Intent(this, RingService::class.java).setAction(RingService.ACTION_STOP)
-            )
-        }
     }
 
     private fun updateTile() {
         val tile: Tile = qsTile ?: return
         val running = AppState.running.value
         tile.state = if (running) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "Aura Ring"
-        tile.subtitle = if (running) AppState.backend.value else "Off"
+        tile.label = getString(R.string.tile_label)
+        tile.subtitle = when {
+            !running -> "Off"
+            AppState.backend.value == "Starting" -> "Starting"
+            else -> AppState.backend.value
+        }
         tile.updateTile()
     }
 }

@@ -1,6 +1,7 @@
 package app.aura.ring.ui
 
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.provider.Settings
@@ -30,6 +31,8 @@ import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -53,9 +56,12 @@ import androidx.core.graphics.drawable.toBitmap
 import app.aura.ring.NotifApp
 import app.aura.ring.NotifPattern
 import app.aura.ring.NotifStore
+import app.aura.ring.NotifStyle
 import app.aura.ring.RingConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 private data class AppEntry(
     val pkg: String,
@@ -76,15 +82,11 @@ fun AppsScreen(
     var showSystem by remember { mutableStateOf(false) }
 
     val listenerEnabled by produceState(
-        initialValue = Settings.Secure.getString(
-            context.contentResolver, "enabled_notification_listeners"
-        )?.contains(context.packageName) == true
+        initialValue = context.notificationAccess()
     ) {
         while (true) {
-            value = Settings.Secure.getString(
-                context.contentResolver, "enabled_notification_listeners"
-            )?.contains(context.packageName) == true
-            kotlinx.coroutines.delay(1_500)
+            value = context.notificationAccess()
+            delay(2_000)
         }
     }
 
@@ -94,32 +96,20 @@ fun AppsScreen(
             val launchable = pm.queryIntentActivities(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
             ).map { it.activityInfo.applicationInfo }
-            val labelMap = LinkedHashMap<String, AppEntry>()
+            val map = LinkedHashMap<String, AppEntry>()
             for (info in launchable) {
                 val pkg = info.packageName
                 if (pkg == context.packageName) continue
-                labelMap[pkg] = AppEntry(
-                    pkg = pkg,
-                    label = runCatching { pm.getApplicationLabel(info).toString() }
-                        .getOrDefault(pkg),
-                    icon = loadIcon(pm, pkg),
-                    system = (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
-                )
+                map[pkg] = info.toEntry(pm, pkg)
             }
             for (pkg in NotifStore.apps.value.keys) {
-                if (labelMap.containsKey(pkg)) continue
+                if (map.containsKey(pkg)) continue
                 val info = runCatching {
                     pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
                 }.getOrNull() ?: continue
-                labelMap[pkg] = AppEntry(
-                    pkg = pkg,
-                    label = runCatching { pm.getApplicationLabel(info).toString() }
-                        .getOrDefault(pkg),
-                    icon = loadIcon(pm, pkg),
-                    system = (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
-                )
+                map[pkg] = info.toEntry(pm, pkg)
             }
-            labelMap.values.sortedBy { it.label.lowercase() }
+            map.values.sortedBy { it.label.lowercase() }
         }
     }
 
@@ -187,7 +177,7 @@ fun AppsScreen(
                         )
                         Text(
                             if (listenerEnabled) {
-                                "Only apps you enable below can flash the ring."
+                                "Ongoing and media notifications are ignored."
                             } else {
                                 "Tap to allow Aura Ring to read notifications."
                             },
@@ -202,11 +192,21 @@ fun AppsScreen(
         item {
             ToggleRow(
                 title = "App notifications",
-                subtitle = "Master switch for all per-app rhythms",
+                subtitle = "Master switch for every per-app rhythm",
                 icon = Icons.Rounded.NotificationsActive,
                 checked = config.notifications,
                 onCheckedChange = { v -> onConfig { it.copy(notifications = v) } },
             )
+        }
+
+        if (config.notifStyle == NotifStyle.OFF) {
+            item {
+                Text(
+                    "Notification style is set to Off on the Ring tab, so these colours will not be shown.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.error,
+                )
+            }
         }
 
         item {
@@ -256,6 +256,7 @@ fun AppsScreen(
             AppCard(
                 entry = entry,
                 app = app,
+                defaultSeconds = config.notifSeconds,
                 onUpdate = { block -> NotifStore.update(entry.pkg, block) },
             )
         }
@@ -266,6 +267,7 @@ fun AppsScreen(
 private fun AppCard(
     entry: AppEntry,
     app: NotifApp,
+    defaultSeconds: Int,
     onUpdate: ((NotifApp) -> NotifApp) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -344,13 +346,49 @@ private fun AppCard(
                         color = app.color,
                         onColor = { c -> onUpdate { it.copy(color = c) } },
                     )
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Length",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            if (app.seconds == 0) "Default (${defaultSeconds}s)" else "${app.seconds}s",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = scheme.onSurface,
+                        )
+                    }
+                    Slider(
+                        value = app.seconds.toFloat(),
+                        onValueChange = { v -> onUpdate { it.copy(seconds = v.roundToInt()) } },
+                        valueRange = 0f..15f,
+                        steps = 14,
+                        colors = SliderDefaults.colors(
+                            thumbColor = scheme.primary,
+                            activeTrackColor = scheme.primary,
+                            inactiveTrackColor = scheme.surfaceContainerHighest,
+                        ),
+                    )
                 }
             }
         }
     }
 }
 
+private fun ApplicationInfo.toEntry(pm: PackageManager, pkg: String) = AppEntry(
+    pkg = pkg,
+    label = runCatching { pm.getApplicationLabel(this).toString() }.getOrDefault(pkg),
+    icon = loadIcon(pm, pkg),
+    system = (flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+)
+
 private fun loadIcon(pm: PackageManager, pkg: String): ImageBitmap? = runCatching {
     val drawable: Drawable = pm.getApplicationIcon(pkg)
     drawable.toBitmap(width = 96, height = 96).asImageBitmap()
 }.getOrNull()
+
+private fun android.content.Context.notificationAccess(): Boolean =
+    Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        ?.contains(packageName) == true

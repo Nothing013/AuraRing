@@ -2,17 +2,19 @@ package app.aura.ring.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalLayoutApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,7 +37,6 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -51,17 +52,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.aura.ring.AppState
+import app.aura.ring.AudioSource
 import app.aura.ring.BatteryInfo
+import app.aura.ring.FrameRate
+import app.aura.ring.NotifStyle
 import app.aura.ring.RingConfig
 import app.aura.ring.RingMode
+import app.aura.ring.ScreenPolicy
+import app.aura.ring.core.Palettes
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     config: RingConfig,
@@ -74,26 +80,27 @@ fun HomeScreen(
 ) {
     val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
-    val bands by AppState.bands.collectAsState()
+    val audio by AppState.audio.collectAsState()
+
+    val enableMusic = {
+        onConfig {
+            it.copy(
+                music = true,
+                mode = if (it.mode == RingMode.SOLID) RingMode.SPECTRUM else it.mode,
+            )
+        }
+    }
 
     val micLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            onConfig {
-                it.copy(
-                    music = true,
-                    mode = if (it.mode == RingMode.SOLID) RingMode.SPECTRUM else it.mode,
-                )
-            }
-        }
+        if (granted) enableMusic()
+        else Toast.makeText(context, "Microphone access is needed for audio capture", Toast.LENGTH_LONG).show()
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = 20.dp, end = 20.dp, top = 18.dp, bottom = 120.dp
-        ),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
@@ -133,7 +140,6 @@ fun HomeScreen(
         }
 
         item {
-            val active = running
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -141,8 +147,8 @@ fun HomeScreen(
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                scheme.primary.copy(alpha = if (active) 0.20f else 0.06f),
-                                scheme.secondary.copy(alpha = if (active) 0.14f else 0.04f),
+                                scheme.primary.copy(alpha = if (running) 0.20f else 0.06f),
+                                scheme.secondary.copy(alpha = if (running) 0.14f else 0.04f),
                             )
                         )
                     )
@@ -154,33 +160,31 @@ fun HomeScreen(
                             .size(44.dp)
                             .clip(CircleShape)
                             .background(
-                                if (active) scheme.primary else scheme.surfaceContainerHighest
+                                if (running) scheme.primary else scheme.surfaceContainerHighest
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             Icons.Rounded.PowerSettingsNew,
                             contentDescription = null,
-                            tint = if (active) scheme.onPrimary else scheme.onSurfaceVariant,
+                            tint = if (running) scheme.onPrimary else scheme.onSurfaceVariant,
                         )
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            if (active) "Ring is active" else "Ring is off",
+                            if (running) "Ring is active" else "Ring is off",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = scheme.onSurface,
                         )
                         Text(
-                            when (backend) {
-                                "Root" -> "Root · full 8-pixel control"
-                                "Shizuku" -> "Shizuku · whole-ring colour"
-                                else -> if (running) {
-                                    "No backend — grant root or Shizuku"
-                                } else {
-                                    "Start to connect to the ring"
-                                }
+                            when {
+                                !running -> "Start to connect to the ring"
+                                backend == "Root" -> "Root · full 8-pixel control"
+                                backend == "Shizuku" -> "Shizuku · whole-ring colour"
+                                backend == "Starting" -> "Connecting…"
+                                else -> "No backend — grant root or Shizuku"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
@@ -210,37 +214,93 @@ fun HomeScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
+                    if (config.mode == RingMode.NOTIFICATIONS_ONLY) {
+                        Text(
+                            "The ring stays dark. Notifications, automations and music still light it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.secondary,
+                        )
+                    }
+                    if (config.mode == RingMode.SPECTRUM && !config.music) {
+                        Text(
+                            "Spectrum is dark until audio-reactive is on.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.secondary,
+                        )
+                    }
                 }
             }
         }
 
         item {
-            val needsSecondColor = config.mode == RingMode.SPECTRUM ||
-                    config.mode == RingMode.SPLIT ||
-                    config.mode == RingMode.SPIN
-            SectionCard(title = "Colour & Palette", icon = Icons.Rounded.Palette) {
+            val paletteMode = config.mode in setOf(
+                RingMode.RAINBOW,
+                RingMode.SPECTRUM,
+                RingMode.FIRE,
+                RingMode.AURORA,
+                RingMode.NOTIFICATIONS_ONLY,
+            )
+            val secondColor = config.mode in setOf(
+                RingMode.SPLIT,
+                RingMode.SPIN,
+                RingMode.SPECTRUM,
+            )
+            SectionCard(title = "Colour & palette", icon = Icons.Rounded.Palette) {
                 ColorPicker(
                     label = when (config.mode) {
-                        RingMode.SPECTRUM -> "Low band (bass)"
+                        RingMode.SPECTRUM -> "Low band colour"
                         RingMode.SPLIT -> "Half A"
-                        RingMode.SPIN -> "Orbiting Spot A"
-                        else -> "Primary Colour"
+                        RingMode.SPIN -> "Orbiting spot A"
+                        else -> "Primary colour"
                     },
                     color = config.color,
                     onColor = { c -> onConfig { it.copy(color = c) } },
                 )
-                AnimatedVisibility(needsSecondColor) {
+                AnimatedVisibility(secondColor) {
                     Column {
                         Spacer(Modifier.height(18.dp))
                         ColorPicker(
                             label = when (config.mode) {
-                                RingMode.SPECTRUM -> "High band (treble)"
+                                RingMode.SPECTRUM -> "High band colour"
                                 RingMode.SPLIT -> "Half B"
-                                RingMode.SPIN -> "Orbiting Spot B"
-                                else -> "Secondary Colour"
+                                else -> "Orbiting spot B"
                             },
                             color = config.color2,
                             onColor = { c -> onConfig { it.copy(color2 = c) } },
+                        )
+                    }
+                }
+                AnimatedVisibility(paletteMode) {
+                    Column {
+                        Spacer(Modifier.height(18.dp))
+                        Text(
+                            "Palette",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = scheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Palettes.ALL.forEach { pal ->
+                                Chip(
+                                    label = pal.label,
+                                    selected = config.palette == pal.id,
+                                    accent = scheme.secondary,
+                                    onClick = { onConfig { it.copy(palette = pal.id) } },
+                                )
+                            }
+                        }
+                        Text(
+                            if (config.palette == Palettes.CUSTOM) {
+                                "Custom fades between the two colours above."
+                            } else {
+                                "Warm and cool palettes come from DashDazz's colour sets."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                 }
@@ -275,6 +335,147 @@ fun HomeScreen(
                         ) { v -> onConfig { it.copy(breatheMs = v.roundToInt()) } }
                     }
                 }
+
+                LabelledSlider(
+                    label = "Smoothing",
+                    value = config.smoothing,
+                    range = 0f..1f,
+                    display = if (config.smoothing < 0.02f) "Off"
+                    else "${(config.smoothing * 100).roundToInt()}%",
+                ) { v -> onConfig { it.copy(smoothing = v) } }
+            }
+        }
+
+        item {
+            SectionCard(
+                title = "Music",
+                icon = Icons.Rounded.MusicNote,
+                accent = scheme.secondary,
+            ) {
+                Column {
+                    ToggleRow(
+                        title = "Audio reactive",
+                        subtitle = "Light follows the beat, bass and treble",
+                        icon = Icons.Rounded.GraphicEq,
+                        checked = config.music,
+                        accent = scheme.secondary,
+                        onCheckedChange = { v ->
+                            if (v && ContextCompat.checkSelfPermission(
+                                    context, Manifest.permission.RECORD_AUDIO
+                                ) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                onConfig { it.copy(music = v) }
+                            }
+                        },
+                    )
+
+                    AnimatedVisibility(config.music) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Spacer(Modifier.height(6.dp))
+                            PillRow(
+                                options = AudioSource.entries,
+                                selected = config.audioSource,
+                                label = { it.label },
+                                onSelect = { s -> onConfig { it.copy(audioSource = s) } },
+                            )
+                            Text(
+                                if (config.audioSource == AudioSource.SYSTEM) {
+                                    "Reads the phone's output mix, so it follows every app."
+                                } else {
+                                    "Uses the microphone. Useful when the output mix is blocked."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+
+                            ToggleRow(
+                                title = "Automatic sensitivity",
+                                subtitle = "Adjusts gain to the volume of the room",
+                                icon = Icons.Rounded.Speed,
+                                checked = config.autoSensitivity,
+                                accent = scheme.secondary,
+                                onCheckedChange = { v -> onConfig { it.copy(autoSensitivity = v) } },
+                            )
+                            if (!config.autoSensitivity) {
+                                LabelledSlider(
+                                    label = "Sensitivity",
+                                    value = config.sensitivity,
+                                    range = 0.3f..2.5f,
+                                    display = "%.2fx".format(config.sensitivity),
+                                ) { v -> onConfig { it.copy(sensitivity = v) } }
+                            }
+
+                            BandMeter(audio.bands)
+                            Text(
+                                when {
+                                    audio.error != null -> audio.error!!
+                                    !running -> "Start the ring to capture audio"
+                                    audio.hasSignal -> buildString {
+                                        append(audio.source)
+                                        if (audio.bpm > 0) append(" · ${audio.bpm} BPM")
+                                        append(" · ${(audio.level * 100).roundToInt()}%")
+                                    }
+                                    else -> "Listening… start playback"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (audio.error != null) scheme.error else scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            SectionCard(
+                title = "Notifications",
+                icon = Icons.Rounded.NotificationsActive,
+                accent = scheme.tertiary,
+            ) {
+                Column {
+                    ToggleRow(
+                        title = "Light up on notifications",
+                        subtitle = "Per-app colours and patterns from the Apps tab",
+                        icon = Icons.Rounded.NotificationsActive,
+                        checked = config.notifications,
+                        accent = scheme.tertiary,
+                        onCheckedChange = { v -> onConfig { it.copy(notifications = v) } },
+                    )
+                    AnimatedVisibility(config.notifications) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            PillRow(
+                                options = NotifStyle.entries,
+                                selected = config.notifStyle,
+                                label = { it.label },
+                                onSelect = { style -> onConfig { it.copy(notifStyle = style) } },
+                            )
+                            Text(
+                                config.notifStyle.blurb,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                            if (config.notifStyle == NotifStyle.EFFECT &&
+                                config.mode == RingMode.NOTIFICATIONS_ONLY
+                            ) {
+                                Text(
+                                    "Events-only has no base effect to run. Choose Flash for notifications in that mode.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.error,
+                                )
+                            }
+                            if (config.notifStyle == NotifStyle.FLASH) {
+                                LabelledSlider(
+                                    label = "Default length",
+                                    value = config.notifSeconds.toFloat(),
+                                    range = 1f..15f,
+                                    display = "${config.notifSeconds}s",
+                                ) { v -> onConfig { it.copy(notifSeconds = v.roundToInt()) } }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -289,69 +490,60 @@ fun HomeScreen(
                         onCheckedChange = { v -> onConfig { it.copy(chargingArc = v) } },
                     )
                     ToggleRow(
-                        title = "Music spectrum",
-                        subtitle = "Eight log-spaced bands, live from the audio mix",
-                        icon = Icons.Rounded.MusicNote,
-                        checked = config.music,
-                        accent = scheme.secondary,
-                        onCheckedChange = { v ->
-                            if (v && ContextCompat.checkSelfPermission(
-                                    context, Manifest.permission.RECORD_AUDIO
-                                ) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                micLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            } else {
-                                onConfig {
-                                    it.copy(
-                                        music = v,
-                                        mode = if (v && it.mode == RingMode.SOLID) {
-                                            RingMode.SPECTRUM
-                                        } else {
-                                            it.mode
-                                        },
-                                    )
-                                }
-                            }
-                        },
-                    )
-                    ToggleRow(
-                        title = "App notifications",
-                        subtitle = "Per-app colours and rhythms, configured on the Apps tab",
-                        icon = Icons.Rounded.NotificationsActive,
-                        checked = config.notifications,
-                        onCheckedChange = { v -> onConfig { it.copy(notifications = v) } },
-                    )
-                    ToggleRow(
-                        title = "Dim when screen is off",
-                        subtitle = "Keeps a faint glow instead of full brightness",
+                        title = "Dim when the screen is off",
+                        subtitle = "A calmer glow at night",
                         icon = Icons.Rounded.DarkMode,
-                        checked = config.screenOffDim,
-                        onCheckedChange = { v -> onConfig { it.copy(screenOffDim = v) } },
+                        checked = config.dimWhenScreenOff,
+                        onCheckedChange = { v -> onConfig { it.copy(dimWhenScreenOff = v) } },
                     )
                     ToggleRow(
                         title = "Start on boot",
-                        subtitle = "Reconnect the ring after a reboot",
+                        subtitle = "Bring the ring back after a reboot",
                         icon = Icons.Rounded.LightMode,
-                        checked = config.autoStart,
-                        onCheckedChange = { v -> onConfig { it.copy(autoStart = v) } },
+                        checked = config.startOnBoot,
+                        onCheckedChange = { v -> onConfig { it.copy(startOnBoot = v) } },
                     )
                 }
             }
         }
 
-        if (config.music) {
-            item {
-                SectionCard(title = "Live spectrum", icon = Icons.Rounded.GraphicEq) {
-                    BandMeter(bands)
-                    Spacer(Modifier.height(10.dp))
+        item {
+            SectionCard(title = "Power", icon = Icons.Rounded.Speed) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        if (bands.any { it > 0.01f }) {
-                            "Capturing system audio"
-                        } else {
-                            "Waiting for audio — start playback to see bands move"
-                        },
+                        "Screen policy",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    PillRow(
+                        options = ScreenPolicy.entries,
+                        selected = config.screenPolicy,
+                        label = { it.label },
+                        onSelect = { p -> onConfig { it.copy(screenPolicy = p) } },
+                    )
+                    Text(
+                        config.screenPolicy.blurb,
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Frame rate",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    PillRow(
+                        options = FrameRate.entries,
+                        selected = config.frameRate,
+                        label = { it.label },
+                        onSelect = { f -> onConfig { it.copy(frameRate = f) } },
+                    )
+                    ToggleRow(
+                        title = "Battery saver mode",
+                        subtitle = "Drop to the Eco frame rate when the phone is saving power",
+                        icon = Icons.Rounded.Bolt,
+                        checked = config.autoEco,
+                        onCheckedChange = { v -> onConfig { it.copy(autoEco = v) } },
                     )
                 }
             }
@@ -379,12 +571,12 @@ fun HomeScreen(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "Configure app rhythms",
+                            "Per-app rhythms",
                             style = MaterialTheme.typography.titleSmall,
                             color = scheme.onSurface,
                         )
                         Text(
-                            "Pick a colour and pattern for each app",
+                            "Pick a colour, pattern and length for each app",
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
                         )
@@ -407,7 +599,8 @@ private fun BackendPill(backend: String, running: Boolean) {
         !running -> "Off" to scheme.onSurfaceVariant
         backend == "Root" -> "Root" to scheme.primary
         backend == "Shizuku" -> "Shizuku" to scheme.tertiary
-        else -> "Starting" to scheme.onSurfaceVariant
+        backend == "Starting" -> "Starting" to scheme.onSurfaceVariant
+        else -> "No access" to scheme.error
     }
     Surface(
         shape = RoundedCornerShape(50),

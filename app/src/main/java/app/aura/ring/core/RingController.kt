@@ -1,39 +1,48 @@
 package app.aura.ring.core
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import app.aura.ring.AppState
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Owns the camera ring. Root is preferred because it exposes all eight RGB
- * pixels; the HyperOS Binder is the fallback and only supports one colour for
- * the whole ring.
+ * Owns the camera ring.
+ *
+ * Root is preferred because it exposes all eight RGB pixels. Without root, the
+ * HyperOS binder is used and the frame is collapsed to a single blended colour.
+ *
+ * The controller never trusts the chip: every write failure triggers a bounded
+ * reconnect, and the sysfs path is discovered instead of hard-coded.
  */
 class RingController(context: Context) {
     private val appContext = context.applicationContext
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val prefs = appContext.getSharedPreferences("aura", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences =
+        appContext.getSharedPreferences("aura", Context.MODE_PRIVATE)
 
     private var root: RootShell? = null
     private var rootReady = false
     private var binderReady = false
+    private var sys = DEFAULT_SYS
 
     private var originalStrip = 2
-    private var originalLamp = 175
+    private var myGeneration = 0L
+    private var lastReconnectMs = 0L
 
     private var lastColors: IntArray? = null
     private var lastBrightness = -1
+    private var lastUniform = false
+    private var lastOff = false
     private var lastBinderColor = Int.MIN_VALUE
-    private var lastBinderBrightness = -1
-    private var lampJob: Job? = null
 
     val supportsPixels: Boolean get() = rootReady
+
     val backendName: String
         get() = when {
             rootReady -> "Root"
@@ -41,32 +50,29 @@ class RingController(context: Context) {
             else -> "None"
         }
 
-    suspend fun init(): String {
-        val currentStrip = Settings.Global.getInt(
-            appContext.contentResolver, "settings_strip_light_enable", 2
-        )
-        // If a previous run crashed while owning the chip, the live value is 0.
-        // Recover the user's real value from the last non-zero reading.
-        val storedStrip = prefs.getInt("original_strip", -1)
-        originalStrip = if (currentStrip == 0 && storedStrip >= 0) storedStrip else currentStrip
-        if (currentStrip != 0) {
-            prefs.edit().putInt("original_strip", currentStrip).apply()
-        }
-        originalLamp = Settings.Global.getInt(
-            appContext.contentResolver, "lamp_effect_brightness", 175
-        )
+    suspend fun init(): String = withContext(Dispatchers.IO) {
+        myGeneration = GENERATION.incrementAndGet()
+        readOriginalStrip()
 
         val shell = RootShell.start()
         if (shell != null) {
-            root = shell
-            // Aura owns the controller while it runs; this releases the
-            // framework's grip so notifications/music cannot stomp our frames.
-            shell.exec("settings put global settings_strip_light_enable 0")
-            shell.exec("echo 1 > $SYS/hwen")
-            rootReady = true
-            binderReady = false
-            AppState.backend.value = "Root"
-            return "Root"
+            val node = findNode(shell)
+            if (node != null) {
+                root = shell
+                sys = node
+                rootReady = true
+                binderReady = false
+                BinderRing.invalidate()
+                shell.exec("echo 1 > $sys/hwen")
+                // Aura owns the controller while it runs; this stops HyperOS
+                // scenes from overwriting frames. Restored on stop.
+                shell.exec("settings put global settings_strip_light_enable 0")
+                invalidate()
+                AppState.backend.value = "Root"
+                Log.d(TAG, "root backend, node=$node")
+                return@withContext "Root"
+            }
+            shell.close()
         }
 
         if (BinderRing.permitted()) {
@@ -75,104 +81,120 @@ class RingController(context: Context) {
             BinderRing.shell(
                 arrayOf("settings", "put", "global", "settings_strip_light_enable", "2")
             )
+            invalidate()
             AppState.backend.value = "Shizuku"
-            return "Shizuku"
+            return@withContext "Shizuku"
         }
 
         rootReady = false
         binderReady = false
         AppState.backend.value = "None"
-        return "None"
+        "None"
     }
 
     suspend fun show(colors: IntArray, brightness: Int) {
-        if (rootReady) rootShow(colors, brightness)
-        else if (binderReady) binderShow(colors, brightness)
+        if (rootReady) {
+            rootShow(colors, brightness)
+        } else if (binderReady) {
+            binderShow(colors, brightness)
+        }
     }
 
     private suspend fun rootShow(colors: IntArray, brightness: Int) {
-        val shell = root ?: return
+        val shell = root
+        if (shell == null || !shell.alive) {
+            reconnect("root shell died")
+            return
+        }
+
         val b = brightness.coerceIn(0, 255)
-
-        if (b == 0) {
-            val r = shell.exec("echo 0 > $SYS/effect")
-            if (r.code == 0) {
-                lastColors = IntArray(8)
+        val empty = colors.all { (it and 0xFFFFFF) == 0 }
+        if (b == 0 || empty) {
+            if (lastOff) return
+            val result = shell.exec("echo 0 > $sys/effect")
+            if (result.code == 0) {
+                lastOff = true
+                lastColors = null
                 lastBrightness = 0
-            }
-            return
-        }
-
-        val same = colors.all { it == colors[0] }
-        if (same && colors[0] == 0 && b == lastBrightness) {
-            return
-        }
-        if (!same && colors.contentEquals(lastColors) && b == lastBrightness) {
-            return
-        }
-        if (same && lastColors != null && lastColors!!.all { it == colors[0] } && b == lastBrightness) {
-            return
-        }
-
-        val cmd = StringBuilder("S=$SYS; ")
-        if (b != lastBrightness) {
-            cmd.append("echo $b > \$S/brightness; ")
-        }
-
-        if (same) {
-            val c = colors[0]
-            if (c == 0) {
-                cmd.append("echo 0 > \$S/effect")
+                lastUniform = false
             } else {
-                cmd.append("echo '0xa1 0x00' > \$S/reg; ")
-                cmd.append("echo '0xa7 0x66' > \$S/reg; ")
-                cmd.append("echo '0xa8 ${hexByte(c shr 16)}' > \$S/reg; ")
-                cmd.append("echo '0xa9 ${hexByte(c shr 8)}' > \$S/reg; ")
-                cmd.append("echo '0xaa ${hexByte(c)}' > \$S/reg; ")
-                cmd.append("echo '0xab 0xff' > \$S/reg; ")
-                cmd.append("echo '0xac 0x00' > \$S/reg")
+                reconnect("effect write failed")
             }
+            return
+        }
+        lastOff = false
+
+        val uniform = colors.all { it == colors[0] }
+        val argb = colors[0] and 0xFFFFFF
+        if (uniform) {
+            val cached = lastColors
+            if (lastUniform && cached != null && (cached[0] and 0xFFFFFF) == argb && b == lastBrightness) return
+        } else {
+            val cached = lastColors
+            if (!lastUniform && cached != null && colors.contentEquals(cached) && b == lastBrightness) return
+        }
+
+        val command = StringBuilder("S=").append(sys).append("; ")
+        if (b != lastBrightness) command.append("echo ").append(b).append(" > \$S/brightness; ")
+
+        if (uniform) {
+            command.append("echo '0xa1 0x00' > \$S/reg; ")
+            command.append("echo '0xa7 0x66' > \$S/reg; ")
+            command.append("echo '0xa8 0x").append(hex((argb shr 16) and 0xFF)).append("' > \$S/reg; ")
+            command.append("echo '0xa9 0x").append(hex((argb shr 8) and 0xFF)).append("' > \$S/reg; ")
+            command.append("echo '0xaa 0x").append(hex(argb and 0xFF)).append("' > \$S/reg; ")
+            command.append("echo '0xab 0xff' > \$S/reg; ")
+            command.append("echo '0xac 0x00' > \$S/reg")
         } else {
             for (i in 0 until 8) {
-                cmd.append("echo '$i ${hexRgb(colors[i])}' > \$S/rgbcolor; ")
+                command.append("echo '").append(i).append(' ')
+                    .append(hexRgb(colors.getOrElse(i) { 0 }))
+                    .append("' > \$S/rgbcolor; ")
             }
-            cmd.append("true")
+            command.append("true")
         }
 
-        val result = shell.exec(cmd.toString())
+        val result = shell.exec(command.toString())
         if (result.code == 0) {
             lastColors = colors.copyOf()
             lastBrightness = b
+            lastUniform = uniform
+        } else {
+            reconnect("frame write failed (exit ${result.code})")
         }
     }
 
     private fun binderShow(colors: IntArray, brightness: Int) {
-        var best = 0
-        var bestLuma = -1f
-        for (c in colors) {
-            val l = 0.299f * ((c shr 16) and 0xFF) +
-                0.587f * ((c shr 8) and 0xFF) +
-                0.114f * (c and 0xFF)
-            if (l > bestLuma) {
-                bestLuma = l
-                best = c
-            }
+        if (!BinderRing.permitted()) {
+            binderReady = false
+            AppState.backend.value = "None"
+            return
         }
-        val scaled = scale(best, brightness / 255f)
-        val out = if (bestLuma <= 0.5f) 0 else (scaled or 0xFF000000.toInt())
-        if (out == lastBinderColor && brightness == lastBinderBrightness) return
+        val blended = Effects.collapse(colors)
+        val luma = Effects.luma(blended)
+        val out = if (luma <= 0.002f || brightness <= 0) {
+            0
+        } else {
+            val scaled = Effects.scale(blended, brightness / 255f)
+            if (scaled == 0) 0 else scaled or 0xFF000000.toInt()
+        }
+        if (out == lastBinderColor) return
         if (BinderRing.setColor(out)) {
             lastBinderColor = out
-            lastBinderBrightness = brightness
+        } else {
+            BinderRing.invalidate()
+            lastBinderColor = Int.MIN_VALUE
         }
     }
 
     suspend fun off() {
         if (rootReady) {
-            root?.exec("echo 0 > $SYS/effect")
-            lastColors = IntArray(8)
+            root?.exec("echo 0 > $sys/effect")
+            lastOff = true
+            lastColors = null
             lastBrightness = 0
-        } else if (binderReady) {
+        }
+        if (binderReady) {
             BinderRing.setColor(0)
             lastBinderColor = 0
         }
@@ -180,112 +202,119 @@ class RingController(context: Context) {
 
     suspend fun hardwareReset(): Boolean {
         val shell = root ?: return false
-        val result = shell.exec("echo 1 > $SYS/hwen")
-        lastColors = null
-        lastBrightness = -1
+        val result = shell.exec("echo 1 > $sys/hwen")
+        invalidate()
         return result.code == 0
     }
 
-    /** Forget cached frame state so the next show() writes everything again. */
+    /** Forget the cached hardware state so the next frame rewrites everything. */
     fun invalidate() {
         lastColors = null
         lastBrightness = -1
+        lastUniform = false
+        lastOff = false
         lastBinderColor = Int.MIN_VALUE
-        lastBinderBrightness = -1
     }
 
-    suspend fun registerDump(): String {
-        val shell = root ?: return "Root is not available"
-        return shell.exec("cat $SYS/reg 2>&1").output
+    /** Full backend restart, used by the reconnect button and on write errors. */
+    suspend fun reconnect(reason: String = "manual") {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastReconnectMs < 3_000) return
+        lastReconnectMs = now
+        Log.w(TAG, "reconnecting: $reason")
+        releaseBackend(restoreStrip = false)
+        init()
     }
 
-    /** Global HyperOS strip switch (0 = off, 2 = on). */
-    suspend fun setSystemStrip(on: Boolean): Boolean {
+    suspend fun setSystemStrip(on: Boolean): Boolean = withContext(Dispatchers.IO) {
         val value = if (on) 2 else 0
-        return if (rootReady) {
-            root?.exec("settings put global settings_strip_light_enable $value")?.code == 0
-        } else if (binderReady) {
-            BinderRing.shell(
+        when {
+            rootReady -> root?.exec("settings put global settings_strip_light_enable $value")?.code == 0
+            binderReady -> BinderRing.shell(
                 arrayOf("settings", "put", "global", "settings_strip_light_enable", value.toString())
             )
-        } else {
-            false
-        }
-    }
-
-    /**
-     * HyperOS brightness is applied through an alpha byte and always shows a
-     * five-second white preview. We only use it when the user explicitly asks
-     * for it; normal brightness is scaled in software.
-     */
-    fun setSystemBrightness(value: Int) {
-        val v = value.coerceIn(80, 255)
-        lampJob?.cancel()
-        lampJob = scope.launch {
-            val ok = if (rootReady) {
-                root?.exec("settings put global lamp_effect_brightness $v")?.code == 0
-            } else {
-                BinderRing.shell(
-                    arrayOf(
-                        "settings", "put", "global", "lamp_effect_brightness", v.toString()
-                    )
-                )
-            }
-            if (ok) {
-                delay(5_200)
-                // The preview timer turns the ring off; put our colour back.
-                lastBinderColor = Int.MIN_VALUE
-                lastBinderBrightness = -1
-                lastColors = null
-                lastBrightness = -1
-            }
+            else -> false
         }
     }
 
     /** Called when the service stops: hand the ring back to HyperOS. */
-    suspend fun restore() {
-        if (rootReady) {
-            root?.exec("echo 0 > $SYS/effect")
-            root?.exec("settings put global settings_strip_light_enable $originalStrip")
-            root?.close()
-            root = null
-            rootReady = false
-        } else if (binderReady) {
-            BinderRing.setColor(0)
-            if (originalStrip != 2) {
-                BinderRing.shell(
-                    arrayOf(
-                        "settings", "put", "global",
-                        "settings_strip_light_enable", originalStrip.toString()
-                    )
-                )
-            }
-            binderReady = false
+    suspend fun restore() = withContext(Dispatchers.IO) {
+        if (GENERATION.get() != myGeneration) {
+            // A newer instance already owns the hardware; do not clobber it.
+            return@withContext
         }
-        lastColors = null
-        lastBrightness = -1
-        lastBinderColor = Int.MIN_VALUE
+        try {
+            if (rootReady) {
+                root?.exec("echo 0 > $sys/effect")
+                if (originalStrip >= 0) {
+                    root?.exec("settings put global settings_strip_light_enable $originalStrip")
+                }
+            } else if (binderReady) {
+                BinderRing.setColor(0)
+                BinderRing.resetScene()
+                if (originalStrip >= 0) {
+                    BinderRing.shell(
+                        arrayOf(
+                            "settings", "put", "global",
+                            "settings_strip_light_enable", originalStrip.toString(),
+                        )
+                    )
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "restore failed", t)
+        } finally {
+            releaseBackend(restoreStrip = false)
+        }
     }
 
-    private fun scale(color: Int, factor: Float): Int {
-        val f = factor.coerceIn(0f, 1f)
-        val r = (((color shr 16) and 0xFF) * f).toInt().coerceIn(0, 255)
-        val g = (((color shr 8) and 0xFF) * f).toInt().coerceIn(0, 255)
-        val b = ((color and 0xFF) * f).toInt().coerceIn(0, 255)
-        return (r shl 16) or (g shl 8) or b
+    private fun releaseBackend(@Suppress("UNUSED_PARAMETER") restoreStrip: Boolean) {
+        root?.close()
+        root = null
+        rootReady = false
+        if (binderReady) BinderRing.invalidate()
+        binderReady = false
+        invalidate()
     }
 
-    private fun hexByte(value: Int): String =
-        "0x%02x".format(value and 0xFF)
+    private suspend fun readOriginalStrip() {
+        val live = runCatching {
+            Settings.Global.getInt(appContext.contentResolver, "settings_strip_light_enable", 2)
+        }.getOrDefault(2)
+        val stored = prefs.getInt("original_strip", -1)
+        // If a previous run died while owning the chip, the live value is 0.
+        originalStrip = if (live == 0 && stored >= 0) stored else live
+        if (live != 0) prefs.edit().putInt("original_strip", live).apply()
+    }
 
-    private fun hexRgb(color: Int): String =
-        "%02x%02x%02x".format(
-            (color shr 16) and 0xFF,
-            (color shr 8) and 0xFF,
-            color and 0xFF,
+    private suspend fun findNode(shell: RootShell): String? {
+        val result = shell.exec(
+            "for d in $SYS_CANDIDATES; do " +
+                "if [ -w \"\$d/brightness\" ]; then echo \"\$d\"; break; fi; " +
+                "done"
         )
+        return result.output.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("/sys/") }
+    }
+
+    private fun hex(value: Int): String = HEX[value and 0xFF]
+
+    private fun hexRgb(color: Int): String {
+        val r = (color shr 16) and 0xFF
+        val g = (color shr 8) and 0xFF
+        val b = color and 0xFF
+        return HEX[r] + HEX[g] + HEX[b]
+    }
 
     companion object {
-        private const val SYS = "/sys/class/leds/aw21024_led"
+        private const val TAG = "AuraRing"
+        private const val DEFAULT_SYS = "/sys/class/leds/aw21024_led"
+        private const val SYS_CANDIDATES =
+            "/sys/class/leds/aw21024_led /sys/class/leds/aw21024 /sys/class/leds/aw21024_leds " +
+                "/sys/class/leds/leds_aw21024 /sys/class/leds/color21024"
+
+        private val GENERATION = AtomicLong(0)
+        private val HEX = Array(256) { "%02x".format(it) }
     }
 }

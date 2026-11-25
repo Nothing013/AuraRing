@@ -5,18 +5,19 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import app.aura.ring.AppState
+import app.aura.ring.NotifStore
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        val action = intent?.action ?: return
-        if (action != Intent.ACTION_BOOT_COMPLETED &&
-            action != Intent.ACTION_LOCKED_BOOT_COMPLETED &&
-            action != Intent.ACTION_MY_PACKAGE_REPLACED
-        ) {
-            return
+        when (intent?.action) {
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_LOCKED_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> Unit
+            else -> return
         }
         AppState.init(context)
-        if (!AppState.config.value.autoStart || !AppState.running.value) return
+        NotifStore.load(context)
+        if (!AppState.config.value.startOnBoot || !AppState.running.value) return
 
         runCatching {
             ContextCompat.startForegroundService(

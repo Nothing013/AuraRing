@@ -42,8 +42,9 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Live 8-pixel preview. It renders the exact same frames as the hardware via
- * [Effects], so colours and motion in the app always match the ring.
+ * Live 8-pixel preview. While the service runs it mirrors the exact frames the
+ * engine sends to the chip; when it is stopped, the same renderer runs in the
+ * app so the preview still animates.
  */
 @Composable
 fun RingPreview(
@@ -51,20 +52,24 @@ fun RingPreview(
     battery: BatteryInfo,
     modifier: Modifier = Modifier,
 ) {
-    val bands by AppState.bands.collectAsState()
+    val audio by AppState.audio.collectAsState()
     val overlay by AppState.overlay.collectAsState()
     val backend by AppState.backend.collectAsState()
-    val perPixel = backend != "Shizuku"
+    val running by AppState.running.collectAsState()
+    val engineFrame by AppState.frame.collectAsState()
+
     val now by produceState(SystemClock.elapsedRealtime()) {
         while (true) {
             value = SystemClock.elapsedRealtime()
             delay(40)
         }
     }
-    val colors = remember(now, config, battery, bands, overlay, perPixel) {
-        Effects.render(config, now, battery, bands, overlay, perPixel)
+    val local = remember(now, config, battery, audio, overlay) {
+        Effects.render(config, now, battery, audio, overlay)
     }
+    val colors = if (running) engineFrame else local
     val scheme = MaterialTheme.colorScheme
+    val perPixel = backend == "Root"
 
     val pulse by rememberInfiniteTransition(label = "halo").animateFloat(
         initialValue = 0.86f,
@@ -113,14 +118,15 @@ fun RingPreview(
                     center.x + (cos(angle) * radius).toFloat(),
                     center.y + (sin(angle) * radius).toFloat(),
                 )
-                val color = Color(colors.getOrElse(i) { 0 })
-                val lit = (colors.getOrElse(i) { 0 } and 0xFFFFFF) != 0
+                val argb = colors.getOrElse(i) { 0 }
+                val color = Color(argb)
+                val lit = (argb and 0xFFFFFF) != 0
                 if (lit) {
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
                                 color.copy(alpha = 0.42f),
-                                color.copy(alpha = 0.0f),
+                                color.copy(alpha = 0f),
                             ),
                             center = pos,
                             radius = dot * 2.3f,
@@ -147,34 +153,46 @@ fun RingPreview(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxSize(),
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                when {
+                    overlay != null && config.notifStyle != app.aura.ring.NotifStyle.EFFECT ->
+                        "NOTIFICATION"
+                    else -> config.mode.label.uppercase()
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = scheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                when {
+                    !perPixel && running -> "RING"
+                    config.mode == RingMode.BATTERY ||
+                        (config.chargingArc && battery.charging) ->
+                        if (battery.level >= 0) "${battery.level}%" else "ARC"
+                    config.mode == RingMode.SPECTRUM -> "LIVE"
+                    config.mode == RingMode.NOTIFICATIONS_ONLY -> "EVENTS"
+                    config.mode == RingMode.OFF -> "OFF"
+                    else -> "8 PX"
+                },
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = scheme.onSurface,
+            )
+            Text(
+                when {
+                    !running -> "preview"
+                    backend == "Root" -> "per-pixel"
+                    backend == "Shizuku" -> "single colour"
+                    else -> "waiting"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant.copy(alpha = 0.8f),
+            )
+            if (config.music && audio.hasSignal && audio.bpm > 0) {
                 Text(
-                    config.mode.label.uppercase(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = scheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    when {
-                        !perPixel -> "RING"
-                        config.mode == RingMode.BATTERY || config.chargingArc && battery.charging ->
-                            if (battery.level >= 0) "${battery.level}%" else "ARC"
-                        config.mode == RingMode.SPECTRUM -> "LIVE"
-                        config.mode == RingMode.OFF -> "OFF"
-                        else -> "8 PX"
-                    },
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurface,
-                )
-                Text(
-                    when {
-                        backend == "Root" -> "per-pixel"
-                        backend == "Shizuku" -> "single colour"
-                        else -> "preview"
-                    },
+                    "${audio.bpm} BPM",
                     style = MaterialTheme.typography.labelSmall,
-                    color = scheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    color = scheme.primary,
                 )
             }
         }

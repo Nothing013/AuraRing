@@ -9,6 +9,7 @@ class AuraApp : Application() {
         super.onCreate()
         AppState.init(this)
         NotifStore.load(this)
+        ColorStore.load()
 
         val manager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(

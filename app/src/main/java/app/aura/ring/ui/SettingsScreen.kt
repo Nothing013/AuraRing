@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Terminal
@@ -45,9 +47,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.aura.ring.AppState
+import app.aura.ring.AudioSource
 import app.aura.ring.BuildConfig
+import app.aura.ring.core.HyperOs
 import kotlinx.coroutines.delay
 import rikka.shizuku.Shizuku
+import kotlin.math.roundToInt
 
 private data class ShizukuState(
     val running: Boolean = false,
@@ -57,12 +62,17 @@ private data class ShizukuState(
 @Composable
 fun SettingsScreen(
     onRestartRing: () -> Unit,
+    onReconnect: () -> Unit,
     onStopRing: () -> Unit,
 ) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     val backend by AppState.backend.collectAsState()
     val running by AppState.running.collectAsState()
+    val audio by AppState.audio.collectAsState()
+    val screenOn by AppState.screenOn.collectAsState()
+    val powerSave by AppState.powerSave.collectAsState()
+    val config by AppState.config.collectAsState()
 
     val shizuku by produceState(ShizukuState()) {
         while (true) {
@@ -76,7 +86,17 @@ fun SettingsScreen(
             } catch (_: Throwable) {
                 ShizukuState()
             }
-            delay(1500)
+            delay(2_000)
+        }
+    }
+
+    val batteryExempt by produceState(false) {
+        while (true) {
+            value = runCatching {
+                context.getSystemService(PowerManager::class.java)
+                    .isIgnoringBatteryOptimizations(context.packageName)
+            }.getOrDefault(false)
+            delay(3_000)
         }
     }
 
@@ -84,15 +104,7 @@ fun SettingsScreen(
         context.contentResolver, "enabled_notification_listeners"
     )?.contains(context.packageName) == true
 
-    val batteryExempt by produceState(false) {
-        while (true) {
-            value = runCatching {
-                context.getSystemService(android.os.PowerManager::class.java)
-                    .isIgnoringBatteryOptimizations(context.packageName)
-            }.getOrDefault(false)
-            delay(2_000)
-        }
-    }
+    val strip = HyperOs.stripValue(context)
 
     LazyColumn(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 120.dp),
@@ -108,7 +120,7 @@ fun SettingsScreen(
                     color = scheme.onBackground,
                 )
                 Text(
-                    "Connection, coordination and automation",
+                    "Connection, audio and automation",
                     style = MaterialTheme.typography.bodyMedium,
                     color = scheme.onSurfaceVariant,
                 )
@@ -120,24 +132,32 @@ fun SettingsScreen(
                 InfoRow("Backend", if (running) backend else "Stopped")
                 InfoRow(
                     "Pixel control",
-                    if (running && backend == "Root") "8 independent RGB pixels"
-                    else if (running) "Whole-ring colour only"
-                    else "—",
+                    when {
+                        !running -> "—"
+                        backend == "Root" -> "8 independent RGB pixels"
+                        backend == "Shizuku" -> "Whole-ring colour only"
+                        else -> "Unavailable"
+                    },
                 )
                 InfoRow("Shizuku service", if (shizuku.running) "Running" else "Not running")
                 InfoRow("Shizuku grant", if (shizuku.granted) "Granted" else "Not granted")
+                InfoRow("Screen", if (screenOn) "On" else "Off")
+                InfoRow("Power saver", if (powerSave) "On" else "Off")
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     FilledTonalButton(onClick = onRestartRing) {
                         Icon(Icons.Rounded.Refresh, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Restart ring")
+                        Text("Restart")
+                    }
+                    OutlinedButton(onClick = onReconnect) {
+                        Text("Reconnect")
                     }
                     OutlinedButton(
                         onClick = {
                             try {
                                 Shizuku.requestPermission(0)
-                            } catch (t: Throwable) {
+                            } catch (_: Throwable) {
                                 Toast.makeText(
                                     context,
                                     "Shizuku is not running",
@@ -154,29 +174,70 @@ fun SettingsScreen(
         }
 
         item {
-            SectionCard(title = "HyperOS coordination", icon = Icons.Rounded.Info) {
+            SectionCard(title = "Audio", icon = Icons.Rounded.MusicNote) {
+                InfoRow("Source", if (config.music) config.audioSource.label else "Off")
+                InfoRow("Capture", if (audio.running) "Running" else "Stopped")
+                InfoRow(
+                    "Signal",
+                    when {
+                        !config.music -> "—"
+                        audio.hasSignal -> "Live"
+                        audio.silent -> "Silent"
+                        else -> "Waiting"
+                    },
+                )
+                if (config.music) {
+                    InfoRow("Level", "${(audio.level * 100).roundToInt()}%")
+                    if (audio.bpm > 0) InfoRow("Tempo", "${audio.bpm} BPM")
+                }
+                audio.error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.error,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    "With root, Aura takes temporary ownership of the light chip. " +
-                        "It sets settings_strip_light_enable=0 while running so HyperOS " +
-                        "cannot overwrite frames, then restores your original value when " +
-                        "you stop the ring.",
+                    if (config.audioSource == AudioSource.SYSTEM) {
+                        "System audio uses Android's Visualizer on output session 0. " +
+                            "Some apps mark their stream as not capturable; switch to the " +
+                            "microphone if the bands stay flat."
+                    } else {
+                        "The microphone source listens to the room. It is more private " +
+                            "than the output mix and works with every player."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(10.dp))
+            }
+        }
+
+        item {
+            SectionCard(title = "HyperOS coordination", icon = Icons.Rounded.Info) {
+                InfoRow(
+                    "System strip",
+                    when (strip) {
+                        0 -> "Off (Aura owns the ring)"
+                        2 -> "On (system can draw)"
+                        -1 -> "Unknown"
+                        else -> strip.toString()
+                    },
+                )
                 Text(
-                    "With Shizuku, the system strip must stay enabled (value 2). " +
-                        "System scenes such as charging or a camera countdown can still " +
-                        "override the ring until Aura's next frame.",
+                    "With root, Aura sets settings_strip_light_enable=0 while the ring " +
+                        "runs so HyperOS scenes cannot overwrite frames, then restores " +
+                        "your value when you stop. With Shizuku the strip must stay on. " +
+                        "System scenes such as charging can still win until Aura's next frame.",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
                 Spacer(Modifier.height(14.dp))
                 OutlinedButton(
                     onClick = onStopRing,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = scheme.error,
-                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.error),
                     border = BorderStroke(1.dp, scheme.error.copy(alpha = 0.5f)),
                 ) {
                     Text("Stop and hand back to HyperOS")
@@ -188,9 +249,8 @@ fun SettingsScreen(
             SectionCard(title = "Automation reliability", icon = Icons.Rounded.Bolt) {
                 Text(
                     "Android blocks apps from starting a foreground service in the " +
-                        "background. Exempting Aura from battery optimisation lets Tasker " +
-                        "and notification intents switch the ring on even when the app is " +
-                        "closed.",
+                        "background. Exempting Aura lets Tasker and notification intents " +
+                        "switch the ring on even when the app is closed.",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )
@@ -224,8 +284,8 @@ fun SettingsScreen(
             SectionCard(title = "Notification access", icon = Icons.Rounded.NotificationsActive) {
                 Text(
                     if (listenerEnabled) {
-                        "Aura can read notification posts and flash the ring for the " +
-                            "apps you enabled."
+                        "Aura can read notification posts and light the ring for apps " +
+                            "you enabled on the Apps tab."
                     } else {
                         "Aura needs notification access before per-app rhythms work."
                     },
@@ -248,9 +308,8 @@ fun SettingsScreen(
         item {
             SectionCard(title = "Tasker & intents", icon = Icons.Rounded.Terminal) {
                 Text(
-                    "Aura accepts broadcasts, so Tasker, MacroDroid or adb can drive " +
-                        "the ring. Colours can be passed as a hex string to avoid signed " +
-                        "decimal conversions.",
+                    "Aura accepts broadcasts, so Tasker, MacroDroid or adb can drive the " +
+                        "ring. Pass colours as hex to avoid signed decimal conversions.",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )
@@ -264,10 +323,18 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 CommandBlock(
-                    title = "Notification-style pulse for 5 seconds",
+                    title = "Five-second green sweep",
                     command = "adb shell am broadcast -a app.aura.ring.PULSE " +
                         "-n app.aura.ring/.tasker.AuraCommandReceiver " +
                         "--es hex \"#4ADE80\" --es pattern SWEEP --ei duration 5",
+                    context = context,
+                )
+                Spacer(Modifier.height(10.dp))
+                CommandBlock(
+                    title = "Events-only mode",
+                    command = "adb shell am broadcast -a app.aura.ring.SET " +
+                        "-n app.aura.ring/.tasker.AuraCommandReceiver " +
+                        "--es mode NOTIFICATIONS_ONLY",
                     context = context,
                 )
                 Spacer(Modifier.height(10.dp))
@@ -279,9 +346,10 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Extras: mode = OFF, SOLID, RAINBOW, BREATHE, COMET, SPECTRUM, " +
-                        "BATTERY · pattern = PULSE, SWEEP, BLINK, BREATHE · colour = " +
-                        "hex or signed int.",
+                    "Extras: mode = OFF, SOLID, RAINBOW, BREATHE, COMET, SPECTRUM, SPLIT, " +
+                        "SPIN, POLICE, FIRE, AURORA, BATTERY, NOTIFICATIONS_ONLY · pattern = " +
+                        "PULSE, SWEEP, BLINK, BREATHE · hex / hex2 · brightness · speed · " +
+                        "sensitivity · music · notifications.",
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.onSurfaceVariant,
                 )
@@ -295,9 +363,9 @@ fun SettingsScreen(
                 InfoRow("Sysfs", "/sys/class/leds/aw21024_led")
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "The ring is an 8-pixel ring around the camera. Eight pixels is all " +
-                        "the chip exposes: arcs, comets and sweeps are quantised to those " +
-                        "eight positions, while brightness is smooth.",
+                    "The ring is eight RGB pixels around the camera. Arcs, comets and " +
+                        "sweeps are quantised to those eight positions; brightness and " +
+                        "colour blending stay smooth.",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )

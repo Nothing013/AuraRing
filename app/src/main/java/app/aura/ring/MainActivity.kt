@@ -128,7 +128,14 @@ private fun AuraRoot(context: Context) {
     val battery by AppState.battery.collectAsState()
     val running by AppState.running.collectAsState()
     val backend by AppState.backend.collectAsState()
+    val serviceAlive by AppState.serviceAlive.collectAsState()
     val scheme = MaterialTheme.colorScheme
+
+    LaunchedEffect(Unit) {
+        // The process can be recreated by the system. If the saved state says
+        // the ring should be running, bring the service back up.
+        if (running && !serviceAlive) startRing(context)
+    }
 
     Box(
         Modifier
@@ -186,6 +193,7 @@ private fun AuraRoot(context: Context) {
 
                     Tab.SETTINGS -> SettingsScreen(
                         onRestartRing = { restartRing(context) },
+                        onReconnect = { reconnectRing(context) },
                         onStopRing = { stopRing(context) },
                     )
                 }
@@ -268,4 +276,13 @@ private fun restartRing(context: Context) {
     Handler(Looper.getMainLooper()).postDelayed({
         startRing(context)
     }, 900)
+}
+
+private fun reconnectRing(context: Context) {
+    runCatching {
+        ContextCompat.startForegroundService(
+            context,
+            Intent(context, RingService::class.java).setAction(RingService.ACTION_RECONNECT),
+        )
+    }
 }
