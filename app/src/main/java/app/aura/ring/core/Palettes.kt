@@ -72,8 +72,10 @@ object Palettes {
         val bb = Color.blue(b) / 255f
 
         val achromatic = isAchromatic(a) || isAchromatic(b)
-        val v = hsv(a)
-        val w = hsv(b)
+        val v = hsvA.get()!!
+        val w = hsvB.get()!!
+        Color.colorToHSV(a, v)
+        Color.colorToHSV(b, w)
         val hue = if (achromatic) {
             if (v[1] >= w[1]) v[0] else w[0]
         } else {
@@ -107,11 +109,8 @@ object Palettes {
         return max == 0 || (max - min) < max * 0.08f
     }
 
-    private val hsvScratch = FloatArray(3)
-
-    private fun hsv(color: Int): FloatArray {
-        val out = FloatArray(3)
-        Color.colorToHSV(color, out)
-        return out
-    }
+    // Sampling runs once per pixel per frame; keep the HSV scratch buffers
+    // per thread so a moving effect does not allocate.
+    private val hsvA = ThreadLocal.withInitial { FloatArray(3) }
+    private val hsvB = ThreadLocal.withInitial { FloatArray(3) }
 }

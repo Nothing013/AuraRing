@@ -17,12 +17,15 @@ class BootReceiver : BroadcastReceiver() {
         }
         AppState.init(context)
         NotifStore.load(context)
-        if (!AppState.config.value.startOnBoot || !AppState.running.value) return
+        // "Start on boot" is the user's instruction; do not require the ring to
+        // have been running when the phone was switched off.
+        if (!AppState.config.value.startOnBoot) return
 
         runCatching {
             ContextCompat.startForegroundService(
                 context, Intent(context, RingService::class.java)
             )
+            AppState.setRunning(true)
         }
     }
 }

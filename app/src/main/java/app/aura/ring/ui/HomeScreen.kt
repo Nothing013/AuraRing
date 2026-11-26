@@ -432,7 +432,7 @@ fun HomeScreen(
                 Column {
                     ToggleRow(
                         title = "Light up on notifications",
-                        subtitle = "Per-app colours and patterns from the Apps tab",
+                        subtitle = "Every app can flash; customise them in the Apps tab",
                         icon = Icons.Rounded.NotificationsActive,
                         checked = config.notifications,
                         accent = scheme.tertiary,

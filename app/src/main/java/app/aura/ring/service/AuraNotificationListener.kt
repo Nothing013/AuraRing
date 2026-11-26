@@ -22,10 +22,11 @@ import app.aura.ring.NotifStyle
  * Apps tab adds per-app overrides. "Only selected apps" in that tab switches
  * to a whitelist.
  *
- * It never starts the ring on its own: notifications decorate a running ring.
- * Ongoing, no-clear and group-summary notifications are ignored, and so are
- * media notifications, because they update constantly while music plays and
- * would otherwise fight the audio-reactive effect.
+ * It never switches a stopped ring on. If the ring was on and HyperOS killed
+ * the foreground service, the listener tries to revive it so notifications
+ * keep working. Ongoing, no-clear and group-summary notifications are ignored,
+ * and so are media notifications, because they update constantly while music
+ * plays and would otherwise fight the audio-reactive effect.
  */
 class AuraNotificationListener : NotificationListenerService() {
 

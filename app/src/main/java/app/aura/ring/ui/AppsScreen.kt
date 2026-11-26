@@ -289,11 +289,29 @@ fun AppsScreen(
 
         items(filtered, key = { it.pkg }) { entry ->
             val app = configured[entry.pkg] ?: NotifApp(entry.pkg)
+            // In "all apps" mode an unconfigured app is already active, so the
+            // switch must show on instead of off.
+            val enabled = if (config.notifOnlySelected) {
+                app.enabled
+            } else {
+                configured[entry.pkg]?.enabled ?: true
+            }
             AppCard(
                 entry = entry,
                 app = app,
+                enabled = enabled,
                 defaultSeconds = config.notifSeconds,
-                onUpdate = { block -> NotifStore.update(entry.pkg, block) },
+                onUpdate = { block ->
+                    NotifStore.update(entry.pkg) { old ->
+                        val next = block(old)
+                        // A colour or pattern change must not quietly switch an
+                        // app off when "all apps" mode is active.
+                        if (next.enabled == old.enabled) next.copy(enabled = enabled) else next
+                    }
+                },
+                onToggle = { value ->
+                    NotifStore.update(entry.pkg) { it.copy(enabled = value) }
+                },
             )
         }
     }
@@ -303,8 +321,10 @@ fun AppsScreen(
 private fun AppCard(
     entry: AppEntry,
     app: NotifApp,
+    enabled: Boolean,
     defaultSeconds: Int,
     onUpdate: ((NotifApp) -> NotifApp) -> Unit,
+    onToggle: (Boolean) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     Surface(
@@ -312,7 +332,7 @@ private fun AppCard(
         color = scheme.surfaceContainer.copy(alpha = 0.8f),
         border = BorderStroke(
             1.dp,
-            if (app.enabled) scheme.primary.copy(alpha = 0.35f) else scheme.outlineVariant,
+            if (enabled) scheme.primary.copy(alpha = 0.35f) else scheme.outlineVariant,
         ),
     ) {
         Column(Modifier.padding(14.dp)) {
@@ -355,8 +375,8 @@ private fun AppCard(
                     )
                 }
                 Switch(
-                    checked = app.enabled,
-                    onCheckedChange = { v -> onUpdate { it.copy(enabled = v) } },
+                    checked = enabled,
+                    onCheckedChange = onToggle,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = scheme.onPrimary,
                         checkedTrackColor = scheme.primary,
@@ -367,7 +387,7 @@ private fun AppCard(
                 )
             }
 
-            AnimatedVisibility(app.enabled) {
+            AnimatedVisibility(enabled) {
                 Column {
                     Spacer(Modifier.height(16.dp))
                     PillRow(

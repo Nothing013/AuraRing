@@ -91,6 +91,7 @@
                 <action android:name="app.aura.ring.PULSE" />
                 <action android:name="app.aura.ring.BRIGHTNESS" />
                 <action android:name="app.aura.ring.TOGGLE" />
+                <action android:name="app.aura.ring.RECONNECT" />
             </intent-filter>
         </receiver>
 
