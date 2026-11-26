@@ -2,12 +2,14 @@ package app.aura.ring.service
 
 import android.app.Notification
 import android.content.ComponentName
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import androidx.core.content.ContextCompat
 import app.aura.ring.AppState
 import app.aura.ring.NotifPattern
 import app.aura.ring.NotifStore
@@ -57,8 +59,12 @@ class AuraNotificationListener : NotificationListenerService() {
         }
         if (!allowed) return
 
-        if (!AppState.serviceAlive.value || !AppState.running.value) {
-            Log.d(TAG, "ignored $pkg: ring not running")
+        if (!AppState.running.value) {
+            Log.d(TAG, "ignored $pkg: ring is off")
+            return
+        }
+        if (!AppState.serviceAlive.value && !restartService()) {
+            Log.d(TAG, "ignored $pkg: service is not running")
             return
         }
 
@@ -98,6 +104,19 @@ class AuraNotificationListener : NotificationListenerService() {
             }
         }, 4_000L)
     }
+
+    /**
+     * HyperOS sometimes kills the foreground service while leaving the
+     * notification listener bound. If the user had the ring switched on, try
+     * to bring it back so notifications keep working. Background service
+     * starts may be blocked; that failure is expected and harmless.
+     */
+    private fun restartService(): Boolean = runCatching {
+        ContextCompat.startForegroundService(
+            this, Intent(this, RingService::class.java)
+        )
+        true
+    }.getOrDefault(false)
 
     private fun isMedia(notification: Notification): Boolean {
         if (notification.category == Notification.CATEGORY_TRANSPORT) return true

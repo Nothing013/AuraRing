@@ -184,17 +184,9 @@ object Effects {
         val phase = ((now * speed / 95L) % 6L).toInt()
         val red = 0xFFFF1818.toInt()
         val blue = 0xFF1855FF.toInt()
-        val left = when (phase) {
-            0, 1 -> red
-            3, 4 -> blue
-            else -> 0
-        }
-        val right = when (phase) {
-            0, 1 -> 0
-            3, 4 -> blue
-            2 -> 0
-            else -> 0
-        }
+        // Left and right run opposite colours and swap, like a light bar.
+        val left = if (phase in 0..2) red else blue
+        val right = if (phase in 0..2) blue else red
         val env = if (config.music && audio.hasSignal) (0.35f + 0.65f * level(config, audio)) else 1f
         return IntArray(PIXELS) { i ->
             val c = if (i < PIXELS / 2) left else right
