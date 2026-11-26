@@ -81,6 +81,7 @@ fun AppsScreen(
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     val configured by NotifStore.apps.collectAsState()
+    val running by AppState.running.collectAsState()
     var query by remember { mutableStateOf("") }
     var showSystem by remember { mutableStateOf(false) }
 
@@ -214,7 +215,7 @@ fun AppsScreen(
                 )
                 OutlinedButton(
                     onClick = {
-                        if (AppState.running.value) {
+                        if (running) {
                             AppState.showOverlay(config.color, NotifPattern.PULSE, 3_000)
                         } else {
                             Toast.makeText(context, "Start the ring first", Toast.LENGTH_SHORT).show()
@@ -222,6 +223,14 @@ fun AppsScreen(
                     },
                 ) {
                     Text("Test flash")
+                }
+                if (!running) {
+                    Text(
+                        "The ring service is stopped, so notifications cannot light it. " +
+                            "Start the ring on the Ring tab.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
                 }
             }
         }

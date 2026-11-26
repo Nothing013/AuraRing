@@ -40,6 +40,7 @@ class RingController(context: Context) {
     private var lastUniform = false
     private var lastOff = false
     private var lastBinderColor = Int.MIN_VALUE
+    private var lastBinderWriteMs = 0L
 
     val supportsPixels: Boolean get() = rootReady
 
@@ -178,9 +179,14 @@ class RingController(context: Context) {
             val scaled = Effects.scale(blended, brightness / 255f)
             if (scaled == 0) 0 else scaled or 0xFF000000.toInt()
         }
-        if (out == lastBinderColor) return
+        // HyperOS scenes (charging, calls, media) can repaint the ring behind
+        // our back on the binder path. Rewrite even an unchanged colour every
+        // couple of seconds so those scenes cannot stick.
+        val stale = SystemClock.elapsedRealtime() - lastBinderWriteMs > 2_000L
+        if (out == lastBinderColor && !stale) return
         if (BinderRing.setColor(out)) {
             lastBinderColor = out
+            lastBinderWriteMs = SystemClock.elapsedRealtime()
         } else {
             BinderRing.invalidate()
             lastBinderColor = Int.MIN_VALUE
@@ -214,6 +220,7 @@ class RingController(context: Context) {
         lastUniform = false
         lastOff = false
         lastBinderColor = Int.MIN_VALUE
+        lastBinderWriteMs = 0L
     }
 
     /** Full backend restart, used by the reconnect button and on write errors. */
