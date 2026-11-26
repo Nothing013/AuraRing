@@ -72,7 +72,7 @@ class RingEngine(private val controller: RingController) {
                 val snap = Effects.snapFrame(config, overlay)
                 val frame = frames.smooth(target, dt, tau, snap)
                 val level = brightness.smooth(
-                    target = brightnessFor(config, screenOn, lit),
+                    target = brightnessFor(config, screenOn, lit, overlay != null),
                     dtMs = dt,
                     tauMs = (tau * 0.6f).coerceAtLeast(45f),
                     snap = snap,
@@ -114,10 +114,16 @@ class RingEngine(private val controller: RingController) {
         }
     }
 
-    private fun brightnessFor(config: RingConfig, screenOn: Boolean, lit: Boolean): Float {
+    private fun brightnessFor(
+        config: RingConfig,
+        screenOn: Boolean,
+        lit: Boolean,
+        event: Boolean,
+    ): Float {
         if (!lit) return 0f
         var value = config.brightness.coerceIn(0, 255).toFloat()
-        if (!screenOn && config.dimWhenScreenOff) value *= 0.4f
+        // Night dimming is for ambient effects; a notification should be seen.
+        if (!screenOn && config.dimWhenScreenOff && !event) value *= 0.4f
         return value
     }
 

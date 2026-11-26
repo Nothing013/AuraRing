@@ -145,12 +145,12 @@ fun SettingsScreen(
                 InfoRow("Power saver", if (powerSave) "On" else "Off")
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FilledTonalButton(onClick = onRestartRing) {
+                    FilledTonalButton(onClick = onRestartRing, enabled = running) {
                         Icon(Icons.Rounded.Refresh, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Restart")
                     }
-                    OutlinedButton(onClick = onReconnect) {
+                    OutlinedButton(onClick = onReconnect, enabled = running) {
                         Text("Reconnect")
                     }
                     OutlinedButton(
@@ -237,6 +237,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(14.dp))
                 OutlinedButton(
                     onClick = onStopRing,
+                    enabled = running,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.error),
                     border = BorderStroke(1.dp, scheme.error.copy(alpha = 0.5f)),
                 ) {
