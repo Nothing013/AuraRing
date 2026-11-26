@@ -34,10 +34,15 @@ object Effects {
     ): IntArray {
         val ov = overlay
         if (ov != null) {
+            // Events are allowed even in Off mode: the mode controls the
+            // ambient effect, not whether notifications can light the ring.
             val age = nowMs - ov.startedAt
             if (age in 0..ov.durationMs) {
-                return if (ov.color == 0) baseFrame(config, nowMs, battery, audio)
-                else overlayFrame(ov, nowMs)
+                return if (ov.color == 0) {
+                    effectFrame(config, nowMs, battery, audio, age)
+                } else {
+                    overlayFrame(ov, nowMs)
+                }
             }
         }
         return baseFrame(config, nowMs, battery, audio)
@@ -75,7 +80,7 @@ object Effects {
     // ---- music -----------------------------------------------------------
 
     private fun level(config: RingConfig, audio: AudioState): Float =
-        (audio.level * config.sensitivity).coerceIn(0f, 1f)
+        audio.level.coerceIn(0f, 1f)
 
     /** Brightness multiplier for modes that are not inherently audio-shaped. */
     private fun musicEnv(config: RingConfig, audio: AudioState): Float {
@@ -93,7 +98,7 @@ object Effects {
 
     private fun spectrum(config: RingConfig, audio: AudioState): IntArray {
         return IntArray(PIXELS) { i ->
-            val v = (audio.bands.getOrElse(i) { 0f } * config.sensitivity).coerceIn(0f, 1f)
+            val v = audio.bands.getOrElse(i) { 0f }.coerceIn(0f, 1f)
             val base = Palettes.sample(config.palette, i / (PIXELS - 1f), config.color, config.color2)
             val boost = 1f + audio.beat * 0.25f
             scale(base, ((0.04f + 0.96f * v) * boost).coerceIn(0f, 1f))
@@ -102,7 +107,7 @@ object Effects {
 
     private fun musicOnly(config: RingConfig, audio: AudioState): IntArray {
         return IntArray(PIXELS) { i ->
-            val band = (audio.bands.getOrElse(i) { 0f } * config.sensitivity).coerceIn(0f, 1f)
+            val band = audio.bands.getOrElse(i) { 0f }.coerceIn(0f, 1f)
             val v = (0.18f + 0.82f * (band * 0.7f + level(config, audio) * 0.3f)) *
                 (1f + audio.beat * 0.2f)
             val base = Palettes.sample(config.palette, i / (PIXELS - 1f), config.color, config.color2)
@@ -244,6 +249,25 @@ object Effects {
 
     // ---- overlays --------------------------------------------------------
 
+    /**
+     * The "Effect" notification style: pulse whatever the ring is already
+     * showing. When the base effect is dark (Off or Events-only with no
+     * music), pulse the primary colour instead so the notification is still
+     * visible.
+     */
+    private fun effectFrame(
+        config: RingConfig,
+        now: Long,
+        battery: BatteryInfo,
+        audio: AudioState,
+        age: Long,
+    ): IntArray {
+        val env = (0.30f + 0.70f * sin(PI * ((age % 700L) / 700.0)).pow(2)).toFloat()
+        val base = baseFrame(config, now, battery, audio)
+        if (base.all { (it and 0xFFFFFF) == 0 }) return solid(scale(config.color, env))
+        return IntArray(PIXELS) { scale(base[it], env) }
+    }
+
     private fun overlayFrame(overlay: Overlay, now: Long): IntArray {
         val age = (now - overlay.startedAt).coerceAtLeast(0)
         return when (overlay.pattern) {
@@ -311,7 +335,9 @@ object Effects {
 
     fun snapFrame(config: RingConfig, overlay: Overlay?): Boolean {
         if (config.mode == RingMode.POLICE) return true
-        if (overlay != null && (overlay.pattern == NotifPattern.BLINK || overlay.pattern == NotifPattern.SWEEP)) {
+        if (overlay != null && overlay.color != 0 &&
+            (overlay.pattern == NotifPattern.BLINK || overlay.pattern == NotifPattern.SWEEP)
+        ) {
             return true
         }
         return false

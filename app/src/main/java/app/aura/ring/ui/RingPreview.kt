@@ -67,7 +67,14 @@ fun RingPreview(
     val local = remember(now, config, battery, audio, overlay) {
         Effects.render(config, now, battery, audio, overlay)
     }
-    val colors = if (running) engineFrame else local
+    val single = Effects.collapse(engineFrame)
+    val colors = when {
+        !running -> local
+        backend == "Root" -> engineFrame
+        // Shizuku drives the whole ring with one blended colour, so show that
+        // instead of pretending the hardware has eight independent pixels.
+        else -> IntArray(Effects.PIXELS) { single }
+    }
     val scheme = MaterialTheme.colorScheme
     val perPixel = backend == "Root"
 

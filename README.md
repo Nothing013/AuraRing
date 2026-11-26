@@ -35,7 +35,7 @@ Thirteen modes, all rendered by the same code that drives the hardware:
 - **Battery** – battery level drawn as an arc.
 - **Events only** – the ring stays dark and only reacts to notifications,
   automations or music.
-- **Off** – dark.
+- **Off** – dark, but notifications still flash.
 
 Brightness, speed, breath length and smoothing are adjustable. Smoothing
 cross-fades mode changes, notification pops and brightness steps; the strobing
@@ -74,13 +74,19 @@ Per-app rhythms are configured on the Apps tab. For each app you can choose:
 - a pattern (Pulse, Sweep, Blink or Breathe),
 - a length, or the global default.
 
-Notification access is required. Ongoing, group-summary and media
-notifications are ignored, because they fire constantly while music plays and
-would fight the audio effect. Notifications only decorate a ring that is
-already running; they do not start it on their own.
+Notification access is required. Every app lights the ring by default, using
+your primary ring colour and a pulse. Turn an app off in the Apps tab to silence
+it, or enable **Only selected apps** there to use a whitelist. Per-app colours,
+patterns and lengths are overrides.
+
+Ongoing, no-clear, group-summary and media notifications are ignored, because
+they update constantly while music plays and would fight the audio effect.
+Notifications only decorate a ring that is already running; they do not start
+it on their own.
 
 The global style is **Off**, **Flash** or **Effect**. Flash uses the app colour
-and pattern. Effect runs the current ring effect for the notification length.
+and pattern. Effect pulses whatever the ring is already showing, and falls back
+to the ring colour when the effect is dark.
 
 ### Screen and power behaviour
 

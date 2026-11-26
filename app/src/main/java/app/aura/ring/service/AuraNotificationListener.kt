@@ -7,16 +7,23 @@ import android.os.Looper
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import app.aura.ring.AppState
+import app.aura.ring.NotifPattern
 import app.aura.ring.NotifStore
 import app.aura.ring.NotifStyle
 
 /**
  * Turns notification posts into ring events.
  *
+ * Like DashDazz, a notification from any app lights the ring by default; the
+ * Apps tab adds per-app overrides. "Only selected apps" in that tab switches
+ * to a whitelist.
+ *
  * It never starts the ring on its own: notifications decorate a running ring.
- * Ongoing and media notifications are ignored because they fire constantly
- * while a song plays and would otherwise fight the audio-reactive effect.
+ * Ongoing, no-clear and group-summary notifications are ignored, and so are
+ * media notifications, because they update constantly while music plays and
+ * would otherwise fight the audio-reactive effect.
  */
 class AuraNotificationListener : NotificationListenerService() {
 
@@ -28,19 +35,32 @@ class AuraNotificationListener : NotificationListenerService() {
         val notification = sbn?.notification ?: return
         val pkg = sbn.packageName ?: return
         if (pkg == packageName) return
-        if (sbn.isOngoing) return
 
         val config = AppState.config.value
         if (!config.notifications || config.notifStyle == NotifStyle.OFF) return
-        if (!AppState.serviceAlive.value || !AppState.running.value) return
 
         if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return
+        if (notification.flags and Notification.FLAG_NO_CLEAR != 0) return
         if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         if (notification.flags and Notification.FLAG_FOREGROUND_SERVICE != 0) return
         if (isMedia(notification)) return
 
-        val app = NotifStore.get(pkg)
-        if (!app.enabled) return
+        // DashDazz behaviour: every app is allowed unless the user turned on
+        // the whitelist. Per-app colours and patterns are overrides.
+        val entry = NotifStore.find(pkg)
+        val allowed = if (config.notifOnlySelected) {
+            entry?.enabled == true
+        } else {
+            // Unconfigured apps flash the primary colour; an entry the user
+            // explicitly switched off stays quiet.
+            entry?.enabled != false
+        }
+        if (!allowed) return
+
+        if (!AppState.serviceAlive.value || !AppState.running.value) {
+            Log.d(TAG, "ignored $pkg: ring not running")
+            return
+        }
 
         val now = SystemClock.elapsedRealtime()
         if (now - (lastPost[pkg] ?: 0L) < PER_APP_GAP_MS) return
@@ -48,10 +68,17 @@ class AuraNotificationListener : NotificationListenerService() {
         lastPost[pkg] = now
         lastAny = now
 
-        val seconds = (if (app.seconds > 0) app.seconds else config.notifSeconds)
+        val seconds = (entry?.seconds?.takeIf { it > 0 } ?: config.notifSeconds)
             .coerceIn(1, 30)
-        val color = if (config.notifStyle == NotifStyle.EFFECT) 0 else app.color
-        AppState.showOverlay(color, app.pattern, seconds * 1000L)
+        if (config.notifStyle == NotifStyle.EFFECT) {
+            AppState.showOverlay(0, NotifPattern.PULSE, seconds * 1000L)
+        } else {
+            AppState.showOverlay(
+                entry?.color ?: config.color,
+                entry?.pattern ?: NotifPattern.PULSE,
+                seconds * 1000L,
+            )
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) = Unit
@@ -60,6 +87,7 @@ class AuraNotificationListener : NotificationListenerService() {
         AppState.init(this)
         NotifStore.load(this)
         lastPost.clear()
+        Log.d(TAG, "listener connected")
     }
 
     override fun onListenerDisconnected() {
@@ -78,6 +106,7 @@ class AuraNotificationListener : NotificationListenerService() {
     }
 
     companion object {
+        private const val TAG = "AuraRingNotif"
         private const val PER_APP_GAP_MS = 1_600L
         private const val GLOBAL_GAP_MS = 400L
     }

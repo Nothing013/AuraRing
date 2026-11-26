@@ -248,13 +248,14 @@ class AudioEngine(private val context: Context) {
                 if (retryJob?.isActive != true) scheduleRetry()
                 continue
             }
+            // A paused player stops the Visualizer callbacks, which is not an
+            // error. Rebuild the stream a few times in case it really died,
+            // then just wait for audio to come back.
             if (now - lastDataAt > STALL_MS) {
                 stalls++
                 if (stalls <= 3) {
-                    error = "Audio stream stalled, reconnecting"
+                    error = null
                     restartCapture()
-                } else if (error == null) {
-                    error = "No audio data. Try the microphone source."
                 }
             }
         }
@@ -514,6 +515,7 @@ class AudioEngine(private val context: Context) {
     private fun feed(levelIn: Float?, bandIn: FloatArray?, now: Long) {
         synchronized(lock) {
             lastDataAt = now
+            stalls = 0
             val dt = if (lastFeedMs == 0L) 33f else (now - lastFeedMs).coerceIn(4L, 250L).toFloat()
             lastFeedMs = now
 
@@ -543,13 +545,10 @@ class AudioEngine(private val context: Context) {
                 levelSmoothed += ((sum / BANDS) - levelSmoothed) * 0.18f
             }
 
-            if (autoSensitivity) {
-                val target = 0.55f
-                val needed = (target / max(levelPeak, 0.05f)).coerceIn(0.6f, 5f)
-                autoGain += (needed - autoGain) * 0.05f
-            } else {
-                autoGain = sensitivity
-            }
+            // Bands are already normalised against their own peak follower, so
+            // "auto" needs no extra gain. The slider is a plain output gain
+            // that only applies when the user takes over.
+            autoGain = if (autoSensitivity) 1f else sensitivity
 
             for (i in 0 until BANDS) {
                 bands[i] = (bandSmoothed[i] * autoGain).coerceIn(0f, 1f)
@@ -590,7 +589,7 @@ class AudioEngine(private val context: Context) {
         } else {
             220L
         }
-        val threshold = max(baseline * (1.28f / sensitivity.coerceAtLeast(0.4f)), 0.06f)
+        val threshold = max(baseline * (1.28f / autoGain.coerceAtLeast(0.4f)), 0.06f)
         if (energy <= threshold) return
         if (lastBeatMs != 0L && now - lastBeatMs < refractory) return
 

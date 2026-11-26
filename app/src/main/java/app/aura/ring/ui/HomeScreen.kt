@@ -83,12 +83,7 @@ fun HomeScreen(
     val audio by AppState.audio.collectAsState()
 
     val enableMusic = {
-        onConfig {
-            it.copy(
-                music = true,
-                mode = if (it.mode == RingMode.SOLID) RingMode.SPECTRUM else it.mode,
-            )
-        }
+        onConfig { it.copy(music = true) }
     }
 
     val micLauncher = rememberLauncherForActivityResult(
@@ -296,7 +291,7 @@ fun HomeScreen(
                             if (config.palette == Palettes.CUSTOM) {
                                 "Custom fades between the two colours above."
                             } else {
-                                "Warm and cool palettes come from DashDazz's colour sets."
+                                "Each palette blends a set of colours evenly around the ring."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
@@ -392,7 +387,7 @@ fun HomeScreen(
 
                             ToggleRow(
                                 title = "Automatic sensitivity",
-                                subtitle = "Adjusts gain to the volume of the room",
+                                subtitle = "Keeps quiet and loud tracks at a similar level",
                                 icon = Icons.Rounded.Speed,
                                 checked = config.autoSensitivity,
                                 accent = scheme.secondary,
@@ -456,15 +451,6 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = scheme.onSurfaceVariant,
                             )
-                            if (config.notifStyle == NotifStyle.EFFECT &&
-                                config.mode == RingMode.NOTIFICATIONS_ONLY
-                            ) {
-                                Text(
-                                    "Events-only has no base effect to run. Choose Flash for notifications in that mode.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = scheme.error,
-                                )
-                            }
                             if (config.notifStyle == NotifStyle.FLASH) {
                                 LabelledSlider(
                                     label = "Default length",

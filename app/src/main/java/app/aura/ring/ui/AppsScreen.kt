@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -53,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import app.aura.ring.AppState
 import app.aura.ring.NotifApp
 import app.aura.ring.NotifPattern
 import app.aura.ring.NotifStore
@@ -134,7 +137,11 @@ fun AppsScreen(
                     color = scheme.onBackground,
                 )
                 Text(
-                    "${configured.values.count { it.enabled }} apps can light the ring",
+                    if (config.notifOnlySelected) {
+                        "${configured.values.count { it.enabled }} apps selected"
+                    } else {
+                        "Every app lights the ring"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = scheme.onSurfaceVariant,
                 )
@@ -177,7 +184,7 @@ fun AppsScreen(
                         )
                         Text(
                             if (listenerEnabled) {
-                                "Ongoing and media notifications are ignored."
+                                "Ongoing and media notifications stay quiet."
                             } else {
                                 "Tap to allow Aura Ring to read notifications."
                             },
@@ -190,13 +197,33 @@ fun AppsScreen(
         }
 
         item {
-            ToggleRow(
-                title = "App notifications",
-                subtitle = "Master switch for every per-app rhythm",
-                icon = Icons.Rounded.NotificationsActive,
-                checked = config.notifications,
-                onCheckedChange = { v -> onConfig { it.copy(notifications = v) } },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ToggleRow(
+                    title = "App notifications",
+                    subtitle = "Master switch for every per-app rhythm",
+                    icon = Icons.Rounded.NotificationsActive,
+                    checked = config.notifications,
+                    onCheckedChange = { v -> onConfig { it.copy(notifications = v) } },
+                )
+                ToggleRow(
+                    title = "Only selected apps",
+                    subtitle = "Otherwise every app flashes the ring colour",
+                    icon = Icons.Rounded.NotificationsActive,
+                    checked = config.notifOnlySelected,
+                    onCheckedChange = { v -> onConfig { it.copy(notifOnlySelected = v) } },
+                )
+                OutlinedButton(
+                    onClick = {
+                        if (AppState.running.value) {
+                            AppState.showOverlay(config.color, NotifPattern.PULSE, 3_000)
+                        } else {
+                            Toast.makeText(context, "Start the ring first", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                ) {
+                    Text("Test flash")
+                }
+            }
         }
 
         if (config.notifStyle == NotifStyle.OFF) {

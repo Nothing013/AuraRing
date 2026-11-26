@@ -205,8 +205,8 @@ fun SettingsScreen(
                             "Some apps mark their stream as not capturable; switch to the " +
                             "microphone if the bands stay flat."
                     } else {
-                        "The microphone source listens to the room. It is more private " +
-                            "than the output mix and works with every player."
+                        "The microphone source listens to the room. It works with every " +
+                            "player, including apps the output mix cannot capture."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,

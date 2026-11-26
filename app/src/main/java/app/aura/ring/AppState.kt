@@ -36,7 +36,7 @@ enum class RingMode(val label: String, val blurb: String) {
     AURORA("Aurora", "A slow wave of nordic light"),
     BATTERY("Battery", "Battery level drawn as an arc"),
     NOTIFICATIONS_ONLY("Events only", "Dark until a notification, automation or music"),
-    OFF("Off", "Ring stays dark");
+    OFF("Off", "Dark; notifications still flash");
 
     companion object {
         /** 0.1 stored modes by ordinal, in this exact order. */
@@ -92,9 +92,11 @@ data class RingConfig(
     val autoSensitivity: Boolean = true,
     val notifications: Boolean = true,
     val notifStyle: NotifStyle = NotifStyle.FLASH,
+    /** When false every app flashes; when true only enabled apps do. */
+    val notifOnlySelected: Boolean = false,
     val notifSeconds: Int = 4,
     val chargingArc: Boolean = true,
-    val screenPolicy: ScreenPolicy = ScreenPolicy.SCREEN_ON,
+    val screenPolicy: ScreenPolicy = ScreenPolicy.ALWAYS,
     val dimWhenScreenOff: Boolean = true,
     val frameRate: FrameRate = FrameRate.BALANCED,
     val autoEco: Boolean = true,
@@ -184,9 +186,10 @@ object AppState {
             autoSensitivity = p.getBoolean("auto_sensitivity", true),
             notifications = p.getBoolean("notifications", true),
             notifStyle = enumOf(p.getString("notif_style", null), NotifStyle.FLASH),
+            notifOnlySelected = p.getBoolean("notif_only_selected", false),
             notifSeconds = p.getInt("notif_seconds", 4),
             chargingArc = p.getBoolean("charging_arc", true),
-            screenPolicy = enumOf(p.getString("screen_policy", null), ScreenPolicy.SCREEN_ON),
+            screenPolicy = enumOf(p.getString("screen_policy", null), ScreenPolicy.ALWAYS),
             dimWhenScreenOff = p.getBoolean("dim_when_off", p.getBoolean("screen_off_dim", true)),
             frameRate = enumOf(p.getString("frame_rate", null), FrameRate.BALANCED),
             autoEco = p.getBoolean("auto_eco", true),
@@ -236,6 +239,7 @@ object AppState {
             .putBoolean("auto_sensitivity", c.autoSensitivity)
             .putBoolean("notifications", c.notifications)
             .putString("notif_style", c.notifStyle.name)
+            .putBoolean("notif_only_selected", c.notifOnlySelected)
             .putInt("notif_seconds", c.notifSeconds)
             .putBoolean("charging_arc", c.chargingArc)
             .putString("screen_policy", c.screenPolicy.name)
@@ -282,7 +286,12 @@ object AppState {
     }
 
     fun showOverlay(color: Int, pattern: NotifPattern, durationMs: Long) {
-        _overlay.value = Overlay(color, pattern, durationMs, SystemClock.elapsedRealtime())
+        _overlay.value = Overlay(
+            color = color,
+            pattern = pattern,
+            durationMs = durationMs,
+            startedAt = SystemClock.elapsedRealtime(),
+        )
         wake.tryEmit(Unit)
     }
 
@@ -329,6 +338,9 @@ object NotifStore {
     }
 
     fun get(pkg: String): NotifApp = _apps.value[pkg] ?: NotifApp(pkg)
+
+    /** Null when the app has never been configured on the Apps tab. */
+    fun find(pkg: String): NotifApp? = _apps.value[pkg]
 
     fun update(pkg: String, block: (NotifApp) -> NotifApp) {
         val next = block(get(pkg)).copy(pkg = pkg)
