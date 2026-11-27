@@ -279,6 +279,30 @@ fun SettingsScreen(
                         Text("Allow background starts")
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = {
+                        val autostart = Intent().setComponent(
+                            android.content.ComponentName(
+                                "com.miui.securitycenter",
+                                "com.miui.permcenter.autostart.AutoStartManagementActivity",
+                            )
+                        )
+                        val opened = runCatching { context.startActivity(autostart) }.isSuccess
+                        if (!opened) {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.parse("package:${context.packageName}"),
+                                    )
+                                )
+                            }
+                        }
+                    },
+                ) {
+                    Text("Allow autostart (HyperOS)")
+                }
             }
         }
 

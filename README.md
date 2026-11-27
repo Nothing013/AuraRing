@@ -140,6 +140,10 @@ adb shell am broadcast -a app.aura.ring.TOGGLE -n app.aura.ring/.tasker.AuraComm
 adb shell am broadcast -a app.aura.ring.BRIGHTNESS \
   -n app.aura.ring/.tasker.AuraCommandReceiver --ei brightness 200
 adb shell am broadcast -a app.aura.ring.RECONNECT -n app.aura.ring/.tasker.AuraCommandReceiver
+
+# post a test notification through the listener
+adb shell am broadcast -a app.aura.ring.TEST_NOTIFICATION \
+  -n app.aura.ring/.tasker.AuraCommandReceiver
 ```
 
 `mode` accepts `OFF`, `SOLID`, `RAINBOW`, `BREATHE`, `COMET`, `SPECTRUM`,
