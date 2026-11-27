@@ -50,6 +50,7 @@ import app.aura.ring.AppState
 import app.aura.ring.AudioSource
 import app.aura.ring.BuildConfig
 import app.aura.ring.core.HyperOs
+import app.aura.ring.service.NotifTester
 import kotlinx.coroutines.delay
 import rikka.shizuku.Shizuku
 import kotlin.math.roundToInt
@@ -285,21 +286,71 @@ fun SettingsScreen(
             SectionCard(title = "Notification access", icon = Icons.Rounded.NotificationsActive) {
                 Text(
                     if (listenerEnabled) {
-                        "Aura can read notification posts and light the ring for apps " +
-                            "you enabled on the Apps tab."
+                        "Aura reads notification posts and lights the ring. Every app " +
+                            "flashes by default; the Apps tab holds the overrides and the " +
+                            "optional whitelist."
                     } else {
-                        "Aura needs notification access before per-app rhythms work."
+                        "Aura needs notification access before notifications can light " +
+                            "the ring."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
-                FilledTonalButton(
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilledTonalButton(
+                        onClick = {
+                            when {
+                                !running -> Toast.makeText(
+                                    context,
+                                    "Start the ring first",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+
+                                !listenerEnabled -> context.startActivity(
+                                    Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                )
+
+                                NotifTester.postTest(context) -> Toast.makeText(
+                                    context,
+                                    "Test notification posted",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+
+                                else -> Toast.makeText(
+                                    context,
+                                    "Allow notifications for Aura, then try again",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                        },
+                    ) {
+                        Text("Send test notification")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val ok = NotifTester.requestRebind(context)
+                            Toast.makeText(
+                                context,
+                                if (ok) {
+                                    "Asked the system to reconnect the listener"
+                                } else {
+                                    "Enable notification access first"
+                                },
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        },
+                    ) {
+                        Text("Reconnect")
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
                     onClick = {
                         context.startActivity(
                             Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
                         )
-                    }
+                    },
                 ) {
                     Text("Open notification access")
                 }

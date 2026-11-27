@@ -9,6 +9,7 @@ import app.aura.ring.AppState
 import app.aura.ring.NotifPattern
 import app.aura.ring.NotifStore
 import app.aura.ring.RingMode
+import app.aura.ring.service.NotifTester
 import app.aura.ring.service.RingService
 
 /**
@@ -84,6 +85,8 @@ class AuraCommandReceiver : BroadcastReceiver() {
                 Intent(app, RingService::class.java).setAction(RingService.ACTION_RECONNECT),
             )
 
+            ACTION_TEST_NOTIFICATION -> NotifTester.postTest(context)
+
             ACTION_OFF, ACTION_STOP -> {
                 AppState.setRunning(false)
                 ensureService(
@@ -144,5 +147,6 @@ class AuraCommandReceiver : BroadcastReceiver() {
         const val ACTION_BRIGHTNESS = "app.aura.ring.BRIGHTNESS"
         const val ACTION_TOGGLE = "app.aura.ring.TOGGLE"
         const val ACTION_RECONNECT = "app.aura.ring.RECONNECT"
+        const val ACTION_TEST_NOTIFICATION = "app.aura.ring.TEST_NOTIFICATION"
     }
 }

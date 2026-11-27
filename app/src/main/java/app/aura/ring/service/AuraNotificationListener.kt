@@ -37,7 +37,9 @@ class AuraNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val notification = sbn?.notification ?: return
         val pkg = sbn.packageName ?: return
-        if (pkg == packageName) return
+        // Ignore Aura's own foreground-service notice, but accept the test
+        // notification posted by the button on the Settings tab.
+        if (pkg == packageName && sbn.tag != NotifTester.TEST_TAG) return
 
         val config = AppState.config.value
         if (!config.notifications || config.notifStyle == NotifStyle.OFF) return
@@ -79,12 +81,12 @@ class AuraNotificationListener : NotificationListenerService() {
             .coerceIn(1, 30)
         if (config.notifStyle == NotifStyle.EFFECT) {
             AppState.showOverlay(0, NotifPattern.PULSE, seconds * 1000L)
+            Log.d(TAG, "effect for $pkg ${seconds}s")
         } else {
-            AppState.showOverlay(
-                entry?.color ?: config.color,
-                entry?.pattern ?: NotifPattern.PULSE,
-                seconds * 1000L,
-            )
+            val color = entry?.color ?: config.color
+            val pattern = entry?.pattern ?: NotifPattern.PULSE
+            AppState.showOverlay(color, pattern, seconds * 1000L)
+            Log.d(TAG, "flash $pkg ${pattern.name} ${seconds}s")
         }
     }
 

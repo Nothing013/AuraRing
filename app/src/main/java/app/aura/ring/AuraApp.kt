@@ -3,6 +3,7 @@ package app.aura.ring
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import app.aura.ring.service.NotifTester
 
 class AuraApp : Application() {
     override fun onCreate() {
@@ -23,5 +24,6 @@ class AuraApp : Application() {
             setSound(null, null)
         }
         manager.createNotificationChannel(channel)
+        NotifTester.createChannel(this)
     }
 }

@@ -92,6 +92,7 @@
                 <action android:name="app.aura.ring.BRIGHTNESS" />
                 <action android:name="app.aura.ring.TOGGLE" />
                 <action android:name="app.aura.ring.RECONNECT" />
+                <action android:name="app.aura.ring.TEST_NOTIFICATION" />
             </intent-filter>
         </receiver>
 

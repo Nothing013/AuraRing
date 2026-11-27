@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import app.aura.ring.service.NotifTester
 import app.aura.ring.service.RingService
 import app.aura.ring.ui.AppsScreen
 import app.aura.ring.ui.AuraTheme
@@ -83,6 +84,9 @@ class MainActivity : ComponentActivity() {
                     ) {
                         permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
+                    // HyperOS can leave notification access enabled without a
+                    // bound listener. This is a no-op when it is already live.
+                    NotifTester.requestRebind(context)
                 }
 
                 val shizukuListener = remember {

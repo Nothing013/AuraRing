@@ -4,6 +4,10 @@
     <string name="tile_label">Aura Ring</string>
     <string name="channel_service">Ring service</string>
     <string name="channel_service_desc">Keeps the camera ring effect running</string>
+    <string name="channel_test">Notification test</string>
+    <string name="channel_test_desc">Only used by the test button on the Settings tab</string>
+    <string name="notif_test_title">Aura test notification</string>
+    <string name="notif_test_text">If the ring flashed, notifications are working.</string>
     <string name="notification_running">Aura Ring is running</string>
     <string name="notification_stop">Stop</string>
 </resources>

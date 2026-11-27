@@ -58,6 +58,7 @@ import androidx.core.graphics.drawable.toBitmap
 import app.aura.ring.AppState
 import app.aura.ring.NotifApp
 import app.aura.ring.NotifPattern
+import app.aura.ring.service.NotifTester
 import app.aura.ring.NotifStore
 import app.aura.ring.NotifStyle
 import app.aura.ring.RingConfig
@@ -215,9 +216,7 @@ fun AppsScreen(
                 )
                 OutlinedButton(
                     onClick = {
-                        if (running) {
-                            AppState.showOverlay(config.color, NotifPattern.PULSE, 3_000)
-                        } else {
+                        if (!NotifTester.flash()) {
                             Toast.makeText(context, "Start the ring first", Toast.LENGTH_SHORT).show()
                         }
                     },

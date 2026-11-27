@@ -45,7 +45,7 @@ modes skip the fade so they stay crisp.
 
 Six palettes plus a custom mode that fades between your two chosen colours:
 Spectrum, Cyberpunk, Sunset, Ocean, Pastel and Fire. The palette applies to
-Rainbow, Spectrum, Fire, Aurora, Comet and the music view of Events-only.
+Rainbow, Spectrum, Fire, Aurora and the music view of Events-only.
 
 ### Music and beat detection
 
@@ -87,6 +87,19 @@ it on their own.
 The global style is **Off**, **Flash** or **Effect**. Flash uses the app colour
 and pattern. Effect pulses whatever the ring is already showing, and falls back
 to the ring colour when the effect is dark.
+
+If a notification does not light the ring:
+
+1. Start the ring first. Notifications decorate a running ring.
+2. Open **Settings → Notification access** and tap **Send test notification**.
+   This posts a real notification and runs it through the listener.
+3. If the test does nothing but access is switched on, tap **Reconnect**.
+   HyperOS can leave the access switch on without binding the listener. Also
+   allow Aura to autostart in the app info page, so the listener comes back
+   after a reboot or when the system kills the app.
+4. Check the **App notifications** master switch on the Apps tab, and that the
+   app is not switched off. With **Only selected apps** on, only the apps you
+   ticked can flash.
 
 ### Screen and power behaviour
 
@@ -143,14 +156,16 @@ Settings.
 
 - **Root** (optional): per-pixel effects through sysfs.
 - **Shizuku** (optional): whole-ring effects without root.
-- **Notification access**: per-app rhythms.
+- **Notification access**: notification lighting and per-app overrides.
 - **Microphone**: audio capture. The system-audio source also needs this
   permission, because Android treats output capture as recording.
 - **Notifications**: the foreground-service notice.
 - **Battery optimisation exemption** (optional): lets Tasker start the ring in
   the background.
 
-## Build
+## Install
+
+Grab the APK from the Releases page, or build it yourself:
 
 ```sh
 ./gradlew assembleDebug
@@ -165,9 +180,9 @@ release build is signed with the debug key so the artifact installs directly.
 - 24 channels: eight RGB pixels.
 - sysfs: `/sys/class/leds/aw21024_led/{hwen,brightness,rgbcolor,reg,effect}`.
 - Per-pixel colour: `echo "N RRGGBB" > rgbcolor` for `N = 0..7`.
-- Global brightness: register `0x6E`. Aura scales colour values in software
-  instead of using `lamp_effect_brightness`, because that node triggers a
-  five-second white preview on every change.
+- Global brightness: the sysfs `brightness` node, with colour values scaled in
+  software. Aura does not use `lamp_effect_brightness`, because that setting
+  triggers a five-second white preview on every change.
 - Writing `0x00` to the global current register silences APSE and the chip
   stops responding until `hwen 1` is written again. Aura never writes it.
 
