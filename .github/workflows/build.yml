@@ -36,6 +36,15 @@ jobs:
       - name: Install SDK platform
         run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0" "build-tools;35.0.0"
 
+      # AGP creates a fresh debug keystore on each new runner. Caching it keeps
+      # the signature stable, so a new APK installs over the previous one
+      # instead of failing with INSTALL_FAILED_UPDATE_INCOMPATIBLE.
+      - name: Cache debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: aura-debug-keystore-v1
+
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
